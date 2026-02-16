@@ -103,7 +103,6 @@ npm run logs:keycloak       # View Keycloak logs only
 
 #### Backend
 
-\`\`\`bash
 ```
 keycloak_app_demo/
 ├── .github/

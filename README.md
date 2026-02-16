@@ -92,10 +92,10 @@ npm run logs:keycloak       # View Keycloak logs only
 
 ## Documentation
 
-- � **[Quick Start Guide](QUICKSTART.md)** - Get running in 5 minutes
-- �📘 **[Automated Setup Guide](AUTOMATED_SETUP.md)** - Complete guide for automated Keycloak setup
-- 📗 **[Manual Setup Guide](KEYCLOAK_SETUP.md)** - Step-by-step manual configuration
-- 📄 **[Project Guidelines](.github/copilot-instructions.md)** - Development best practices
+- [Quick Start Guide](doc/QUICKSTART.md) - Get running in 5 minutes
+- [Automated Setup Guide](doc/AUTOMATED_SETUP.md) - Complete guide for automated Keycloak setup
+- [Manual Setup Guide](doc/KEYCLOAK_SETUP.md) - Step-by-step manual configuration
+- [Project Guidelines](.github/copilot-instructions.md) - Development best practices
 
 ## Development
 
@@ -104,38 +104,52 @@ npm run logs:keycloak       # View Keycloak logs only
 #### Backend
 
 \`\`\`bash
-cd backend
-npm install
-cp .env.example .env
-# Edit .env with your configuration
-npm run dev
-\`\`\`
+```
+keycloak_app_demo/
+├── .github/
+│   └── copilot-instructions.md
+├── backend/
+│   ├── src/
+│   │   ├── middleware/
+│   │   │   └── auth.js          # JWT validation middleware
+│   │   └── routes/
+│   │       └── notes.js         # Notes CRUD endpoints
+│   ├── database.js              # PostgreSQL connection & queries
+│   ├── server.js                # Express server setup
+│   ├── package.json
+│   └── Dockerfile
+├── doc/
+│   ├── AUTOMATED_SETUP.md
+│   ├── KEYCLOAK_SETUP.md
+│   └── QUICKSTART.md
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── NotesList.js     # Notes display component
+│   │   │   └── NoteForm.js      # Note create/edit form
+│   │   ├── contexts/
+│   │   │   └── AuthContext.js   # Auth state management
+│   │   ├── services/
+│   │   │   ├── keycloak.js      # Keycloak integration
+│   │   │   └── noteService.js   # API client
+│   │   ├── App.js               # Main app component
+│   │   └── index.js             # React entry point
+│   ├── public/
+│   │   ├── index.html
+│   │   └── silent-check-sso.html
+│   ├── package.json
+│   └── Dockerfile
+├── reverse-proxy/
+│   ├── includes/
+│   └── nginx.conf
+├── scripts/
+│   ├── fix-client.js
+│   └── setup-keycloak.js
+├── docker-compose.override.yml.example
+├── docker-compose.yml           # Service orchestration
+└── package.json
 
-#### Frontend
-
-\`\`\`bash
-cd frontend
-npm install
-cp .env.example .env
-# Edit .env with your configuration
-npm start
-\`\`\`
-
-### Environment Variables
-
-See `.env.example` files in both `backend/` and `frontend/` directories for all available configuration options.
-
-### Database Migrations
-
-The database schema is automatically initialized on first run. To manually initialize:
-
-\`\`\`bash
-docker-compose exec backend node -e "require('./database').init()"
-\`\`\`
-
-## Project Structure
-
-\`\`\`
+```
 keycloak_app_demo/
 ├── backend/
 │   ├── src/

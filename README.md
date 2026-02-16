@@ -154,9 +154,9 @@ keycloak_app_demo/
 
 All endpoints require a valid JWT token in the Authorization header:
 
-\`\`\`
+``` bash
 Authorization: Bearer <token>
-\`\`\`
+```
 
 #### GET /api/notes
 Fetch all notes for the authenticated user.

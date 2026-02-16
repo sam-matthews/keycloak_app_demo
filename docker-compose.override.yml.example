@@ -1,0 +1,21 @@
+# Docker Compose Override Example
+# Copy this file to docker-compose.override.yml and customize for local development
+# docker-compose.override.yml is automatically merged with docker-compose.yml
+
+version: '3.8'
+
+services:
+  backend:
+    # Override for local development with live reload
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+    # Uncomment to override client secret locally
+    # environment:
+    #   KEYCLOAK_CLIENT_SECRET: your-local-client-secret
+
+  frontend:
+    # Override for local development
+    command: npm start
+    environment:
+      CHOKIDAR_USEPOLLING: "true"  # Enable for file watching in containers

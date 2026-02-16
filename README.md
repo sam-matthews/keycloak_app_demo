@@ -95,6 +95,7 @@ npm run logs:keycloak       # View Keycloak logs only
 - [Quick Start Guide](doc/QUICKSTART.md) - Get running in 5 minutes
 - [Automated Setup Guide](doc/AUTOMATED_SETUP.md) - Complete guide for automated Keycloak setup
 - [Manual Setup Guide](doc/KEYCLOAK_SETUP.md) - Step-by-step manual configuration
+- [Passkey Realm Setup](doc/PASSKEY_REALM_SETUP.md) - Create development realm for passkey testing
 - [Project Guidelines](.github/copilot-instructions.md) - Development best practices
 
 ## Development

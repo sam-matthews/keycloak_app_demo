@@ -162,7 +162,7 @@ Authorization: Bearer <token>
 Fetch all notes for the authenticated user.
 
 **Response:**
-\`\`\`json
+``` json
 [
   {
     "id": 1,
@@ -174,29 +174,29 @@ Fetch all notes for the authenticated user.
     "updated_at": "2026-02-11T10:00:00Z"
   }
 ]
-\`\`\`
+```
 
 #### POST /api/notes
 Create a new note.
 
 **Request:**
-\`\`\`json
+``` json
 {
   "title": "My Note",
   "content": "Note content"
 }
-\`\`\`
+```
 
 #### PUT /api/notes/:id
 Update an existing note.
 
 **Request:**
-\`\`\`json
+```json
 {
   "title": "Updated Title",
   "content": "Updated content"
 }
-\`\`\`
+```
 
 #### DELETE /api/notes/:id
 Delete a note.
@@ -217,22 +217,22 @@ Delete a note.
 ### Keycloak Not Starting
 
 Check if port 8080 is available:
-\`\`\`bash
+```bash
 lsof -i :8080
-\`\`\`
+```
 
 Wait for Keycloak health check to pass:
-\`\`\`bash
+```bash
 docker-compose logs -f keycloak
-\`\`\`
+```
 
 ### Backend Cannot Connect to Database
 
 Ensure app-db is healthy:
-\`\`\`bash
+```bash
 docker-compose ps
 docker-compose logs app-db
-\`\`\`
+``` 
 
 ### Frontend Cannot Connect to Backend
 

@@ -145,7 +145,6 @@ keycloak_app_demo/
 ├── scripts/
 │   ├── fix-client.js
 │   └── setup-keycloak.js
-├── docker-compose.override.yml.example
 ├── docker-compose.yml           # Service orchestration
 └── package.json
 

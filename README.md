@@ -71,6 +71,8 @@ After the script completes:
 docker-compose run --rm keycloak-setup
 ```
 
+If you run setup via Docker Compose, any printed admin console URL using `http://keycloak:8080` is only valid inside the Docker network. Use `http://localhost:8080` in your browser.
+
 ### Option 2: Manual Setup
 
 If you prefer manual configuration, follow the detailed steps in [KEYCLOAK_SETUP.md](KEYCLOAK_SETUP.md).
@@ -95,6 +97,7 @@ npm run logs:keycloak       # View Keycloak logs only
 - [Quick Start Guide](doc/QUICKSTART.md) - Get running in 5 minutes
 - [Automated Setup Guide](doc/AUTOMATED_SETUP.md) - Complete guide for automated Keycloak setup
 - [Manual Setup Guide](doc/KEYCLOAK_SETUP.md) - Step-by-step manual configuration
+- [Passkey Realm Setup](doc/PASSKEY_REALM_SETUP.md) - Create development realm for passkey testing
 - [Project Guidelines](.github/copilot-instructions.md) - Development best practices
 
 ## Development

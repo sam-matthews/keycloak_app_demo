@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Keycloak Setup Script
+ * Passkey Realm Setup Script
  * 
- * This script automates the complete Keycloak configuration:
- * - Creates the demo-realm
- * - Creates the web-app client with proper settings
- * - Creates test users with passwords
- * - Configures all necessary settings
+ * Creates a development realm specifically for passkey experimentation:
+ * - Creates the dev-passkeys realm
+ * - Sets it to Enabled
+ * - Uses default login theme
  */
 
 const https = require('https');
@@ -16,8 +15,7 @@ const http = require('http');
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin123';
-const REALM_NAME = process.env.KEYCLOAK_REALM || 'demo-realm';
-const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || 'web-app';
+const REALM_NAME = 'dev-passkeys';
 
 // Color codes for terminal output
 const colors = {
@@ -33,25 +31,17 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
-function getHostKeycloakBaseUrl() {
+function getHostAdminConsoleUrl() {
   try {
     const urlObj = new URL(KEYCLOAK_URL);
     if (urlObj.hostname === 'keycloak') {
       urlObj.hostname = 'localhost';
-      return urlObj.toString().replace(/\/$/, '');
+      return `${urlObj.toString().replace(/\/$/, '')}/admin/master/console/#/${REALM_NAME}`;
     }
   } catch (error) {
     return null;
   }
   return null;
-}
-
-function getHostAdminConsoleUrl() {
-  const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
-  if (!hostKeycloakBaseUrl) {
-    return null;
-  }
-  return `${hostKeycloakBaseUrl}/admin/master/console/#/${REALM_NAME}`;
 }
 
 function makeRequest(url, options = {}) {
@@ -121,7 +111,6 @@ async function waitForKeycloak() {
 
   while (attempt < maxAttempts) {
     try {
-      // Check if Keycloak master realm is accessible (more reliable than health endpoint)
       await makeRequest(`${KEYCLOAK_URL}/realms/master`);
       log('✓ Keycloak is ready!', 'green');
       return true;
@@ -166,20 +155,47 @@ async function getAdminToken() {
   }
 }
 
-async function createRealm(token) {
+async function updatePasskeyRealm(token) {
+  log(`\n🔧 Updating realm settings: ${REALM_NAME}...`, 'yellow');
+
+  const realmUpdate = {
+    enabled: true,
+    loginTheme: 'keycloak',
+  };
+
+  try {
+    await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: realmUpdate,
+    });
+    log(`✓ Realm '${REALM_NAME}' updated successfully`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Failed to update realm: ${error.message}`, 'red');
+    throw error;
+  }
+}
+
+async function createPasskeyRealm(token) {
   log(`\n🏗️  Creating realm: ${REALM_NAME}...`, 'yellow');
 
   const realmConfig = {
     realm: REALM_NAME,
     enabled: true,
-    displayName: 'Demo Realm',
-    registrationAllowed: false,
+    displayName: 'Development Passkeys Realm',
+    displayNameHtml: '<div>Development Passkeys Realm</div>',
+    loginTheme: 'keycloak',
+    registrationAllowed: true,
     loginWithEmailAllowed: true,
     duplicateEmailsAllowed: false,
     resetPasswordAllowed: true,
     editUsernameAllowed: false,
     bruteForceProtected: true,
-    sslRequired: 'none', // For development; use 'external' or 'all' in production
+    sslRequired: 'none',
   };
 
   try {
@@ -195,7 +211,8 @@ async function createRealm(token) {
     return true;
   } catch (error) {
     if (error.statusCode === 409) {
-      log(`ℹ Realm '${REALM_NAME}' already exists`, 'cyan');
+      log(`ℹ Realm '${REALM_NAME}' already exists, enforcing settings`, 'cyan');
+      await updatePasskeyRealm(token);
       return false;
     }
     log(`✗ Failed to create realm: ${error.message}`, 'red');
@@ -203,95 +220,30 @@ async function createRealm(token) {
   }
 }
 
-async function createClient(token) {
-  log(`\n🔧 Creating client: ${CLIENT_ID}...`, 'yellow');
-
-  const clientConfig = {
-    clientId: CLIENT_ID,
-    name: 'Web Application',
-    description: 'React frontend application',
-    enabled: true,
-    protocol: 'openid-connect',
-    publicClient: true,  // Browser apps must be public clients
-    standardFlowEnabled: true,
-    directAccessGrantsEnabled: true,
-    serviceAccountsEnabled: false,
-    authorizationServicesEnabled: false,
-    redirectUris: ['http://localhost:3000/*'],
-    webOrigins: ['http://localhost:3000'],
-    attributes: {
-      'pkce.code.challenge.method': 'S256',
-      'post.logout.redirect.uris': 'http://localhost:3000/*',
-    },
-  };
+async function verifyRealm(token) {
+  log(`\n✅ Verifying realm configuration...`, 'yellow');
 
   try {
     const response = await makeRequest(
-      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients`,
+      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`,
       {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: clientConfig,
       }
     );
 
-    log(`✓ Client '${CLIENT_ID}' created successfully`, 'green');
-    log(`ℹ Client is configured as a public client with PKCE (no secret needed)`, 'cyan');
-    return null;
-  } catch (error) {
-    if (error.statusCode === 409) {
-      log(`ℹ Client '${CLIENT_ID}' already exists`, 'cyan');
-      return null;
-    }
-    log(`✗ Failed to create client: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-async function createUser(token, username, email, firstName, lastName, password) {
-  log(`\n👤 Creating user: ${username}...`, 'yellow');
-
-  const userConfig = {
-    username: username,
-    email: email,
-    firstName: firstName,
-    lastName: lastName,
-    enabled: true,
-    emailVerified: true,
-    credentials: [
-      {
-        type: 'password',
-        value: password,
-        temporary: false,
-      },
-    ],
-  };
-
-  try {
-    await makeRequest(
-      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: userConfig,
-      }
-    );
-    log(`✓ User '${username}' created successfully`, 'green');
-    log(`  Email: ${email}`, 'cyan');
-    log(`  Password: ${password}`, 'cyan');
+    const realm = response.data;
+    
+    log(`✓ Realm '${REALM_NAME}' is accessible`, 'green');
+    log(`  Enabled: ${realm.enabled}`, 'cyan');
+    log(`  Login Theme: ${realm.loginTheme}`, 'cyan');
+    log(`  Display Name: ${realm.displayName}`, 'cyan');
+    
     return true;
   } catch (error) {
-    if (error.statusCode === 409) {
-      log(`ℹ User '${username}' already exists`, 'cyan');
-      return false;
-    }
-    log(`✗ Failed to create user: ${error.message}`, 'red');
+    log(`✗ Failed to verify realm: ${error.message}`, 'red');
     throw error;
   }
 }
@@ -299,12 +251,11 @@ async function createUser(token, username, email, firstName, lastName, password)
 async function main() {
   try {
     log('╔════════════════════════════════════════════╗', 'blue');
-    log('║   Keycloak Automated Setup Script         ║', 'blue');
+    log('║   Passkey Realm Setup Script              ║', 'blue');
     log('╚════════════════════════════════════════════╝', 'blue');
     
     log(`\nKeycloak URL: ${KEYCLOAK_URL}`, 'cyan');
     log(`Realm: ${REALM_NAME}`, 'cyan');
-    log(`Client: ${CLIENT_ID}`, 'cyan');
 
     // Step 1: Wait for Keycloak
     await waitForKeycloak();
@@ -312,86 +263,34 @@ async function main() {
     // Step 2: Get admin token
     const token = await getAdminToken();
 
-    // Step 3: Create realm
-    await createRealm(token);
+    // Step 3: Create passkey realm
+    await createPasskeyRealm(token);
 
-    // Step 4: Create client
-    const clientSecret = await createClient(token);
-
-    // Step 5: Create test users
-    log('\n👥 Creating test users...', 'yellow');
-    
-    const users = [
-      {
-        username: 'testuser',
-        email: 'testuser@example.com',
-        firstName: 'Test',
-        lastName: 'User',
-        password: 'password123',
-      },
-      {
-        username: 'demo',
-        email: 'demo@example.com',
-        firstName: 'Demo',
-        lastName: 'Account',
-        password: 'demo123',
-      },
-      {
-        username: 'alice',
-        email: 'alice@example.com',
-        firstName: 'Alice',
-        lastName: 'Smith',
-        password: 'alice123',
-      },
-    ];
-
-    for (const user of users) {
-      await createUser(
-        token,
-        user.username,
-        user.email,
-        user.firstName,
-        user.lastName,
-        user.password
-      );
-    }
+    // Step 4: Verify realm
+    await verifyRealm(token);
 
     // Summary
     log('\n╔════════════════════════════════════════════╗', 'green');
     log('║        Setup Completed Successfully!       ║', 'green');
     log('╚════════════════════════════════════════════╝', 'green');
 
-    log('\n📝 Summary:', 'yellow');
-    log(`✓ Realm: ${REALM_NAME}`, 'green');
-    log(`✓ Client: ${CLIENT_ID}`, 'green');
-    log(`✓ Users created: ${users.length}`, 'green');
+    log('\n📝 Realm Details:', 'yellow');
+    log(`  • Name: ${REALM_NAME}`, 'green');
+    log(`  • Status: Enabled`, 'green');
+    log(`  • Login Theme: keycloak (default)`, 'green');
 
-    log('\n🔑 Test User Credentials:', 'yellow');
-    users.forEach(user => {
-      log(`  • ${user.username} / ${user.password}`, 'cyan');
-    });
-
-    if (clientSecret) {
-      log('\n⚠️  Action Required:', 'yellow');
-      log('Update docker-compose.yml with the client secret shown above', 'yellow');
-      log('Then restart the backend: docker-compose restart backend', 'yellow');
-    }
-
-    log('\n🎉 You can now access the application:', 'green');
-    log('   Frontend: http://localhost:3000', 'cyan');
-    log('   Keycloak: http://localhost:8080', 'cyan');
-    const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
-    if (hostKeycloakBaseUrl) {
-      log(`   Keycloak (host): ${hostKeycloakBaseUrl}`, 'yellow');
-    }
-    log('   Backend API: http://localhost:3001', 'cyan');
-
-    log('\n🔗 Admin Console:', 'yellow');
-    log(`   ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');
+    log('\n🎉 Next Steps:', 'yellow');
+    log(`  1. Access Admin Console: ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');
     const hostAdminConsoleUrl = getHostAdminConsoleUrl();
     if (hostAdminConsoleUrl) {
-      log(`   (Host): ${hostAdminConsoleUrl}`, 'yellow');
+      log(`     (If running on your host, use: ${hostAdminConsoleUrl})`, 'yellow');
     }
+    log(`  2. Configure passkey authentication flow`, 'cyan');
+    log(`  3. Create test users for passkey testing`, 'cyan');
+
+    log('\n🔗 Access URLs:', 'green');
+    log(`   Keycloak Admin: ${KEYCLOAK_URL}/admin`, 'cyan');
+    log(`   Realm Login: ${KEYCLOAK_URL}/realms/${REALM_NAME}/account`, 'cyan');
 
   } catch (error) {
     log('\n✗ Setup failed:', 'red');

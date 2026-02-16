@@ -154,6 +154,8 @@ curl http://localhost:3001/api/health
 4. Verify `demo-realm` exists
 5. Check Users section shows 3 users
 
+If you ran setup via `docker-compose run`, ignore any `http://keycloak:8080` URL in the script output and use `http://localhost:8080` instead.
+
 ## Troubleshooting
 
 ### "Keycloak is not ready"

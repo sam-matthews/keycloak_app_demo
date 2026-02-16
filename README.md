@@ -146,39 +146,7 @@ keycloak_app_demo/
 │   └── setup-keycloak.js
 ├── docker-compose.yml           # Service orchestration
 └── package.json
-
 ```
-keycloak_app_demo/
-├── backend/
-│   ├── src/
-│   │   ├── middleware/
-│   │   │   └── auth.js          # JWT validation middleware
-│   │   └── routes/
-│   │       └── notes.js         # Notes CRUD endpoints
-│   ├── database.js              # PostgreSQL connection & queries
-│   ├── server.js                # Express server setup
-│   ├── package.json
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── NotesList.js     # Notes display component
-│   │   │   └── NoteForm.js      # Note create/edit form
-│   │   ├── contexts/
-│   │   │   └── AuthContext.js   # Auth state management
-│   │   ├── services/
-│   │   │   ├── keycloak.js      # Keycloak integration
-│   │   │   └── noteService.js   # API client
-│   │   ├── App.js               # Main app component
-│   │   └── index.js             # React entry point
-│   ├── public/
-│   │   ├── index.html
-│   │   └── silent-check-sso.html
-│   ├── package.json
-│   └── Dockerfile
-└── docker-compose.yml           # Service orchestration
-
-\`\`\`
 
 ## API Endpoints
 

@@ -33,6 +33,27 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
+function getHostKeycloakBaseUrl() {
+  try {
+    const urlObj = new URL(KEYCLOAK_URL);
+    if (urlObj.hostname === 'keycloak') {
+      urlObj.hostname = 'localhost';
+      return urlObj.toString().replace(/\/$/, '');
+    }
+  } catch (error) {
+    return null;
+  }
+  return null;
+}
+
+function getHostAdminConsoleUrl() {
+  const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
+  if (!hostKeycloakBaseUrl) {
+    return null;
+  }
+  return `${hostKeycloakBaseUrl}/admin/master/console/#/${REALM_NAME}`;
+}
+
 function makeRequest(url, options = {}) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
@@ -359,7 +380,18 @@ async function main() {
     log('\n🎉 You can now access the application:', 'green');
     log('   Frontend: http://localhost:3000', 'cyan');
     log('   Keycloak: http://localhost:8080', 'cyan');
+    const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
+    if (hostKeycloakBaseUrl) {
+      log(`   Keycloak (host): ${hostKeycloakBaseUrl}`, 'yellow');
+    }
     log('   Backend API: http://localhost:3001', 'cyan');
+
+    log('\n🔗 Admin Console:', 'yellow');
+    log(`   ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');
+    const hostAdminConsoleUrl = getHostAdminConsoleUrl();
+    if (hostAdminConsoleUrl) {
+      log(`   (Host): ${hostAdminConsoleUrl}`, 'yellow');
+    }
 
   } catch (error) {
     log('\n✗ Setup failed:', 'red');

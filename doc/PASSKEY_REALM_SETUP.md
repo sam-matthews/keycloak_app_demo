@@ -42,6 +42,8 @@ The script will:
 - ✅ Configure default login theme (`keycloak`)
 - ✅ Verify the realm is accessible
 
+If the realm already exists, the script will update it to enforce `Enabled` and the default login theme.
+
 ## Realm Configuration
 
 | Setting | Value |
@@ -59,6 +61,8 @@ The script will:
 ```
 http://localhost:8080/admin/master/console/#/dev-passkeys
 ```
+
+If you run the setup script via `docker-compose run`, the script may print a URL that uses the internal Docker hostname (`http://keycloak:8080`). Use the `localhost` URL in your browser instead.
 
 Login with:
 - Username: `admin`
@@ -131,7 +135,7 @@ docker-compose restart keycloak
 **Problem:** Script reports realm already exists
 
 **Solution:**
-The script is idempotent. If the realm already exists, it will verify the configuration without making changes.
+The script is idempotent. If the realm already exists, it will update it to enforce the expected settings.
 
 To recreate the realm:
 1. Delete it via Admin Console

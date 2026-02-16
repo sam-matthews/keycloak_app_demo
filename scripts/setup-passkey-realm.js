@@ -31,6 +31,19 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
+function getHostAdminConsoleUrl() {
+  try {
+    const urlObj = new URL(KEYCLOAK_URL);
+    if (urlObj.hostname === 'keycloak') {
+      urlObj.hostname = 'localhost';
+      return `${urlObj.toString().replace(/\/$/, '')}/admin/master/console/#/${REALM_NAME}`;
+    }
+  } catch (error) {
+    return null;
+  }
+  return null;
+}
+
 function makeRequest(url, options = {}) {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
@@ -142,6 +155,31 @@ async function getAdminToken() {
   }
 }
 
+async function updatePasskeyRealm(token) {
+  log(`\n🔧 Updating realm settings: ${REALM_NAME}...`, 'yellow');
+
+  const realmUpdate = {
+    enabled: true,
+    loginTheme: 'keycloak',
+  };
+
+  try {
+    await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: realmUpdate,
+    });
+    log(`✓ Realm '${REALM_NAME}' updated successfully`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Failed to update realm: ${error.message}`, 'red');
+    throw error;
+  }
+}
+
 async function createPasskeyRealm(token) {
   log(`\n🏗️  Creating realm: ${REALM_NAME}...`, 'yellow');
 
@@ -173,7 +211,8 @@ async function createPasskeyRealm(token) {
     return true;
   } catch (error) {
     if (error.statusCode === 409) {
-      log(`ℹ Realm '${REALM_NAME}' already exists`, 'cyan');
+      log(`ℹ Realm '${REALM_NAME}' already exists, enforcing settings`, 'cyan');
+      await updatePasskeyRealm(token);
       return false;
     }
     log(`✗ Failed to create realm: ${error.message}`, 'red');
@@ -242,6 +281,10 @@ async function main() {
 
     log('\n🎉 Next Steps:', 'yellow');
     log(`  1. Access Admin Console: ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');
+    const hostAdminConsoleUrl = getHostAdminConsoleUrl();
+    if (hostAdminConsoleUrl) {
+      log(`     (If running on your host, use: ${hostAdminConsoleUrl})`, 'yellow');
+    }
     log(`  2. Configure passkey authentication flow`, 'cyan');
     log(`  3. Create test users for passkey testing`, 'cyan');
 

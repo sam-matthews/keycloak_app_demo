@@ -71,6 +71,8 @@ After the script completes:
 docker-compose run --rm keycloak-setup
 ```
 
+If you run setup via Docker Compose, any printed admin console URL using `http://keycloak:8080` is only valid inside the Docker network. Use `http://localhost:8080` in your browser.
+
 ### Option 2: Manual Setup
 
 If you prefer manual configuration, follow the detailed steps in [KEYCLOAK_SETUP.md](KEYCLOAK_SETUP.md).

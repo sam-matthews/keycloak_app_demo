@@ -35,6 +35,8 @@ docker-compose up -d
 docker-compose run --rm keycloak-setup
 ```
 
+If the script prints a URL with `http://keycloak:8080`, that hostname is only reachable from inside Docker. Use `http://localhost:8080` in your browser.
+
 ### Method 3: Direct Execution
 
 ```bash

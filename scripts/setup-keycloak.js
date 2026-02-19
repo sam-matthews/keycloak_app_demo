@@ -206,24 +206,51 @@ async function createRealm(token) {
 async function createClient(token) {
   log(`\n🔧 Creating client: ${CLIENT_ID}...`, 'yellow');
 
-  const clientConfig = {
-    clientId: CLIENT_ID,
-    name: 'Web Application',
-    description: 'React frontend application',
-    enabled: true,
-    protocol: 'openid-connect',
-    publicClient: true,  // Browser apps must be public clients
-    standardFlowEnabled: true,
-    directAccessGrantsEnabled: true,
-    serviceAccountsEnabled: false,
-    authorizationServicesEnabled: false,
-    redirectUris: ['http://localhost:3000/*'],
-    webOrigins: ['http://localhost:3000'],
-    attributes: {
-      'pkce.code.challenge.method': 'S256',
-      'post.logout.redirect.uris': 'http://localhost:3000/*',
-    },
-  };
+  // macOS OIDC client config
+  let clientConfig;
+  if (CLIENT_ID === 'macos-app') {
+    clientConfig = {
+      clientId: CLIENT_ID,
+      name: 'macOS App',
+      description: 'OIDC client for macOS app',
+      enabled: true,
+      protocol: 'openid-connect',
+      publicClient: true, // No client secret, public client
+      standardFlowEnabled: true, // Authorization Code Flow
+      directAccessGrantsEnabled: false,
+      serviceAccountsEnabled: false,
+      authorizationServicesEnabled: false,
+      redirectUris: [
+        'myapp://auth/callback',
+        'http://localhost/*',
+      ],
+      webOrigins: [],
+      attributes: {
+        'pkce.code.challenge.method': 'S256',
+        'post.logout.redirect.uris': 'myapp://auth/callback http://localhost/*',
+      },
+    };
+  } else {
+    // Default (web-app)
+    clientConfig = {
+      clientId: CLIENT_ID,
+      name: 'Web Application',
+      description: 'React frontend application',
+      enabled: true,
+      protocol: 'openid-connect',
+      publicClient: true,  // Browser apps must be public clients
+      standardFlowEnabled: true,
+      directAccessGrantsEnabled: true,
+      serviceAccountsEnabled: false,
+      authorizationServicesEnabled: false,
+      redirectUris: ['http://localhost:3000/*'],
+      webOrigins: ['http://localhost:3000'],
+      attributes: {
+        'pkce.code.challenge.method': 'S256',
+        'post.logout.redirect.uris': 'http://localhost:3000/*',
+      },
+    };
+  }
 
   try {
     const response = await makeRequest(

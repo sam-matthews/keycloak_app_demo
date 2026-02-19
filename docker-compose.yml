@@ -132,6 +132,28 @@ services:
     profiles:
       - setup
 
+  # Keycloak Setup Service for macOS App (run manually with: docker-compose run --rm keycloak-setup-macos)
+  keycloak-setup-macos:
+    image: node:18-alpine
+    container_name: keycloak-setup-macos
+    working_dir: /app
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123
+      KEYCLOAK_REALM: demo-realm
+      KEYCLOAK_CLIENT_ID: macos-app
+    volumes:
+      - ./scripts:/app/scripts
+    command: node /app/scripts/setup-keycloak.js
+    depends_on:
+      keycloak:
+        condition: service_started
+    networks:
+      - app-network
+    profiles:
+      - setup
+
 networks:
   app-network:
     driver: bridge

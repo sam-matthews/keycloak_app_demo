@@ -9,9 +9,10 @@ The `setup-keycloak.js` script uses Keycloak's Admin REST API to automatically:
 1. ✅ Wait for Keycloak to be fully ready
 2. ✅ Authenticate with Keycloak admin credentials
 3. ✅ Create the `demo-realm` with security settings
-4. ✅ Create the `web-app` client with OAuth/OIDC configuration
-5. ✅ Generate and display the client secret
-6. ✅ Create test users with passwords (non-temporary)
+4. ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
+5. ✅ Create the `web-app` client with OAuth/OIDC configuration
+6. ✅ Generate and display the client secret
+7. ✅ Create test users with passwords (non-temporary)
 
 ## Quick Usage
 
@@ -78,6 +79,11 @@ npm run setup-keycloak
 - **Reset Password**: Enabled
 - **Brute Force Protection**: Enabled
 - **SSL Requirement**: None (development mode)
+
+### Required Action: WebAuthn Register Passwordless
+
+- **Availability**: Enabled at realm level
+- **Default Action**: Disabled (not forced for every user)
 
 ### Client: `web-app`
 

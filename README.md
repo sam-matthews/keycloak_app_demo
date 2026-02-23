@@ -51,6 +51,7 @@ npm run setup-keycloak
 The script will automatically:
 - ✅ Wait for Keycloak to be ready
 - ✅ Create the `demo-realm`
+- ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
 - ✅ Create the `web-app` client
 - ✅ Generate and display the client secret
 - ✅ Create 3 test users with passwords

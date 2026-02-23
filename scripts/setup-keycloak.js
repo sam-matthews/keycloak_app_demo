@@ -18,6 +18,7 @@ const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin123';
 const REALM_NAME = process.env.KEYCLOAK_REALM || 'demo-realm';
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || 'web-app';
+const PASSWORDLESS_REQUIRED_ACTION_ALIAS = 'webauthn-register-passwordless';
 
 // Color codes for terminal output
 const colors = {
@@ -278,6 +279,75 @@ async function createClient(token) {
   }
 }
 
+async function ensurePasswordlessRequiredAction(token) {
+  log('\n🔐 Ensuring required action is available: WebAuthn Register Passwordless...', 'yellow');
+
+  try {
+    const response = await makeRequest(
+      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/required-actions`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    );
+
+    const requiredActions = Array.isArray(response.data) ? response.data : [];
+    const targetAction = requiredActions.find((action) => {
+      const alias = String(action.alias || '').toLowerCase();
+      const name = String(action.name || '').toLowerCase();
+      const providerId = String(action.providerId || '').toLowerCase();
+
+      return (
+        alias === PASSWORDLESS_REQUIRED_ACTION_ALIAS ||
+        providerId === PASSWORDLESS_REQUIRED_ACTION_ALIAS ||
+        name === 'webauthn register passwordless'
+      );
+    });
+
+    if (!targetAction) {
+      const availableAliases = requiredActions
+        .map((action) => action.alias)
+        .filter(Boolean)
+        .join(', ');
+      throw new Error(
+        `Required action 'WebAuthn Register Passwordless' is not available in realm '${REALM_NAME}'. Available aliases: ${availableAliases || 'none'}`
+      );
+    }
+
+    const actionAlias = targetAction.alias || PASSWORDLESS_REQUIRED_ACTION_ALIAS;
+    const shouldEnable = targetAction.enabled !== true;
+    const shouldDisableDefault = targetAction.defaultAction !== false;
+
+    if (!shouldEnable && !shouldDisableDefault) {
+      log('✓ Required action already enabled and not default', 'green');
+      return;
+    }
+
+    await makeRequest(
+      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/required-actions/${encodeURIComponent(actionAlias)}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: {
+          ...targetAction,
+          enabled: true,
+          defaultAction: false,
+        },
+      }
+    );
+
+    log('✓ Required action configured (enabled=true, defaultAction=false)', 'green');
+  } catch (error) {
+    log(`✗ Failed to configure passwordless required action: ${error.message}`, 'red');
+    throw error;
+  }
+}
+
 async function createUser(token, username, email, firstName, lastName, password) {
   log(`\n👤 Creating user: ${username}...`, 'yellow');
 
@@ -342,10 +412,13 @@ async function main() {
     // Step 3: Create realm
     await createRealm(token);
 
-    // Step 4: Create client
+    // Step 4: Ensure passwordless required action availability
+    await ensurePasswordlessRequiredAction(token);
+
+    // Step 5: Create client
     const clientSecret = await createClient(token);
 
-    // Step 5: Create test users
+    // Step 6: Create test users
     log('\n👥 Creating test users...', 'yellow');
     
     const users = [
@@ -390,6 +463,7 @@ async function main() {
 
     log('\n📝 Summary:', 'yellow');
     log(`✓ Realm: ${REALM_NAME}`, 'green');
+    log('✓ Required Action: WebAuthn Register Passwordless (enabled, not default)', 'green');
     log(`✓ Client: ${CLIENT_ID}`, 'green');
     log(`✓ Users created: ${users.length}`, 'green');
 

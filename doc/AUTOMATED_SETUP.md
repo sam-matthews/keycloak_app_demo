@@ -10,9 +10,10 @@ The `setup-keycloak.js` script uses Keycloak's Admin REST API to automatically:
 2. ✅ Authenticate with Keycloak admin credentials
 3. ✅ Create the `demo-realm` with security settings
 4. ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
-5. ✅ Create the `web-app` client with OAuth/OIDC configuration
-6. ✅ Generate and display the client secret
-7. ✅ Create test users with passwords (non-temporary)
+5. ✅ Configure realm `WebAuthn Passwordless` for localhost development
+6. ✅ Create the `web-app` client with OAuth/OIDC configuration
+7. ✅ Generate and display the client secret
+8. ✅ Create test users with passwords (non-temporary)
 
 ## Quick Usage
 
@@ -59,6 +60,11 @@ The script uses these environment variables (with defaults):
 | `KEYCLOAK_ADMIN_PASSWORD` | `admin123` | Admin password |
 | `KEYCLOAK_REALM` | `demo-realm` | Realm name to create |
 | `KEYCLOAK_CLIENT_ID` | `web-app` | Client ID to create |
+| `WEBAUTHN_PASSWORDLESS_RP_ID` | `localhost` | WebAuthn Passwordless RP ID |
+| `WEBAUTHN_PASSWORDLESS_RP_NAME` | `Mac App Dev` | WebAuthn Passwordless RP name |
+| `WEBAUTHN_PASSWORDLESS_ORIGIN` | `http://localhost:8080` | WebAuthn Passwordless allowed origin |
+| `WEBAUTHN_PASSWORDLESS_USER_VERIFICATION` | `preferred` | WebAuthn Passwordless user verification requirement |
+| `WEBAUTHN_PASSWORDLESS_ATTESTATION` | `none` | WebAuthn Passwordless attestation conveyance |
 
 ### Custom Configuration Example
 
@@ -84,6 +90,14 @@ npm run setup-keycloak
 
 - **Availability**: Enabled at realm level
 - **Default Action**: Disabled (not forced for every user)
+
+### Realm WebAuthn Passwordless (localhost defaults)
+
+- **Relying Party ID**: `localhost`
+- **Relying Party Name**: `Mac App Dev`
+- **Origin**: `http://localhost:8080`
+- **User Verification**: `preferred`
+- **Attestation Conveyance**: `none`
 
 ### Client: `web-app`
 

@@ -36,6 +36,8 @@ This application follows microservices best practices with containerized service
 
 The fastest way to get started is using the automated setup script:
 
+Environment defaults (including WebAuthn Passwordless overrides) are documented in `.env.example` at the repository root.
+
 ```bash
 # 1. Clone and navigate to the repository
 git clone <repository-url>
@@ -52,6 +54,7 @@ The script will automatically:
 - ✅ Wait for Keycloak to be ready
 - ✅ Create the `demo-realm`
 - ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
+- ✅ Configure realm `WebAuthn Passwordless` for localhost (`localhost`, `Mac App Dev`, `http://localhost:8080`)
 - ✅ Create the `web-app` client
 - ✅ Generate and display the client secret
 - ✅ Create 3 test users with passwords

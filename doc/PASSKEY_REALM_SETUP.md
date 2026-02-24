@@ -40,6 +40,7 @@ The script will:
 - ✅ Create the `dev-passkeys` realm
 - ✅ Set it to `Enabled`
 - ✅ Configure default login theme (`keycloak`)
+- ✅ Configure `WebAuthn Passwordless` localhost policy
 - ✅ Verify the realm is accessible
 
 If the realm already exists, the script will update it to enforce `Enabled` and the default login theme.
@@ -54,6 +55,25 @@ If the realm already exists, the script will update it to enforce `Enabled` and 
 | Login Theme | `keycloak` (default) |
 | Registration Allowed | `true` |
 | SSL Required | `none` (development only) |
+
+### WebAuthn Passwordless Defaults
+
+| Setting | Value |
+|---------|-------|
+| Relying Party ID | `localhost` |
+| Relying Party Name | `Mac App Dev` |
+| Origin | `http://localhost:8080` |
+| User Verification | `preferred` |
+| Attestation Conveyance | `none` |
+
+These can be overridden when running the script by setting:
+- `WEBAUTHN_PASSWORDLESS_RP_ID`
+- `WEBAUTHN_PASSWORDLESS_RP_NAME`
+- `WEBAUTHN_PASSWORDLESS_ORIGIN`
+- `WEBAUTHN_PASSWORDLESS_USER_VERIFICATION`
+- `WEBAUTHN_PASSWORDLESS_ATTESTATION`
+
+See the root `.env.example` for a ready-to-copy set of defaults used by both setup scripts.
 
 ## Accessing the Realm
 

@@ -16,6 +16,13 @@ const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin123';
 const REALM_NAME = 'dev-passkeys';
+const WEBAUTHN_PASSWORDLESS_RP_ID = process.env.WEBAUTHN_PASSWORDLESS_RP_ID || 'localhost';
+const WEBAUTHN_PASSWORDLESS_RP_NAME = process.env.WEBAUTHN_PASSWORDLESS_RP_NAME || 'Mac App Dev';
+const WEBAUTHN_PASSWORDLESS_ORIGIN = process.env.WEBAUTHN_PASSWORDLESS_ORIGIN || 'http://localhost:8080';
+const WEBAUTHN_PASSWORDLESS_USER_VERIFICATION =
+  process.env.WEBAUTHN_PASSWORDLESS_USER_VERIFICATION || 'preferred';
+const WEBAUTHN_PASSWORDLESS_ATTESTATION =
+  process.env.WEBAUTHN_PASSWORDLESS_ATTESTATION || 'none';
 
 // Color codes for terminal output
 const colors = {
@@ -248,6 +255,118 @@ async function verifyRealm(token) {
   }
 }
 
+async function configureWebAuthnPasswordlessPolicy(token) {
+  log('\n🔑 Configuring WebAuthn Passwordless policy for localhost...', 'yellow');
+
+  const policyUpdate = {
+    webAuthnPolicyPasswordlessRpId: WEBAUTHN_PASSWORDLESS_RP_ID,
+    webAuthnPolicyPasswordlessRpEntityName: WEBAUTHN_PASSWORDLESS_RP_NAME,
+    webAuthnPolicyPasswordlessExtraOrigins: [WEBAUTHN_PASSWORDLESS_ORIGIN],
+    webAuthnPolicyPasswordlessUserVerificationRequirement:
+      WEBAUTHN_PASSWORDLESS_USER_VERIFICATION,
+    webAuthnPolicyPasswordlessAttestationConveyancePreference:
+      WEBAUTHN_PASSWORDLESS_ATTESTATION,
+  };
+
+  try {
+    await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: policyUpdate,
+    });
+    log('✓ WebAuthn Passwordless policy updated', 'green');
+  } catch (error) {
+    log(`✗ Failed to configure WebAuthn Passwordless policy: ${error.message}`, 'red');
+    throw error;
+  }
+}
+
+function toOriginList(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  return String(value)
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function verifyWebAuthnPasswordlessPolicy(token) {
+  log('\n✅ Verifying WebAuthn Passwordless policy persisted...', 'yellow');
+
+  try {
+    const response = await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const realm = response.data || {};
+    const savedOrigins = toOriginList(realm.webAuthnPolicyPasswordlessExtraOrigins);
+
+    const checks = [
+      {
+        label: 'RP ID',
+        actual: realm.webAuthnPolicyPasswordlessRpId,
+        expected: WEBAUTHN_PASSWORDLESS_RP_ID,
+      },
+      {
+        label: 'RP Name',
+        actual: realm.webAuthnPolicyPasswordlessRpEntityName,
+        expected: WEBAUTHN_PASSWORDLESS_RP_NAME,
+      },
+      {
+        label: 'User Verification',
+        actual: realm.webAuthnPolicyPasswordlessUserVerificationRequirement,
+        expected: WEBAUTHN_PASSWORDLESS_USER_VERIFICATION,
+      },
+      {
+        label: 'Attestation Conveyance',
+        actual: realm.webAuthnPolicyPasswordlessAttestationConveyancePreference,
+        expected: WEBAUTHN_PASSWORDLESS_ATTESTATION,
+      },
+    ];
+
+    for (const check of checks) {
+      if (check.actual !== check.expected) {
+        throw new Error(
+          `${check.label} verification failed. Expected '${check.expected}', got '${check.actual}'`
+        );
+      }
+    }
+
+    if (!savedOrigins.includes(WEBAUTHN_PASSWORDLESS_ORIGIN)) {
+      throw new Error(
+        `Origin verification failed. Expected '${WEBAUTHN_PASSWORDLESS_ORIGIN}' in [${savedOrigins.join(', ')}]`
+      );
+    }
+
+    log(`✓ RP ID: ${realm.webAuthnPolicyPasswordlessRpId}`, 'green');
+    log(`✓ RP Name: ${realm.webAuthnPolicyPasswordlessRpEntityName}`, 'green');
+    log(`✓ Origin includes: ${WEBAUTHN_PASSWORDLESS_ORIGIN}`, 'green');
+    log(
+      `✓ User Verification: ${realm.webAuthnPolicyPasswordlessUserVerificationRequirement}`,
+      'green'
+    );
+    log(
+      `✓ Attestation: ${realm.webAuthnPolicyPasswordlessAttestationConveyancePreference}`,
+      'green'
+    );
+  } catch (error) {
+    log(`✗ Failed to verify WebAuthn Passwordless policy: ${error.message}`, 'red');
+    throw error;
+  }
+}
+
 async function main() {
   try {
     log('╔════════════════════════════════════════════╗', 'blue');
@@ -269,6 +388,12 @@ async function main() {
     // Step 4: Verify realm
     await verifyRealm(token);
 
+    // Step 5: Configure WebAuthn Passwordless realm policy
+    await configureWebAuthnPasswordlessPolicy(token);
+
+    // Step 6: Verify WebAuthn Passwordless policy
+    await verifyWebAuthnPasswordlessPolicy(token);
+
     // Summary
     log('\n╔════════════════════════════════════════════╗', 'green');
     log('║        Setup Completed Successfully!       ║', 'green');
@@ -278,6 +403,14 @@ async function main() {
     log(`  • Name: ${REALM_NAME}`, 'green');
     log(`  • Status: Enabled`, 'green');
     log(`  • Login Theme: keycloak (default)`, 'green');
+    log(`  • Passwordless RP ID: ${WEBAUTHN_PASSWORDLESS_RP_ID}`, 'green');
+    log(`  • Passwordless RP Name: ${WEBAUTHN_PASSWORDLESS_RP_NAME}`, 'green');
+    log(`  • Passwordless Origin: ${WEBAUTHN_PASSWORDLESS_ORIGIN}`, 'green');
+    log(
+      `  • Passwordless User Verification: ${WEBAUTHN_PASSWORDLESS_USER_VERIFICATION}`,
+      'green'
+    );
+    log(`  • Passwordless Attestation: ${WEBAUTHN_PASSWORDLESS_ATTESTATION}`, 'green');
 
     log('\n🎉 Next Steps:', 'yellow');
     log(`  1. Access Admin Console: ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');

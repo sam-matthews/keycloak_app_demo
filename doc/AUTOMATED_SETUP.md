@@ -9,11 +9,14 @@ The `setup-keycloak.js` script uses Keycloak's Admin REST API to automatically:
 1. ✅ Wait for Keycloak to be fully ready
 2. ✅ Authenticate with Keycloak admin credentials
 3. ✅ Create the `demo-realm` with security settings
-4. ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
-5. ✅ Configure realm `WebAuthn Passwordless` for localhost development
-6. ✅ Create the `web-app` client with OAuth/OIDC configuration
-7. ✅ Generate and display the client secret
-8. ✅ Create test users with passwords (non-temporary)
+4. ✅ Copy the built-in `browser` flow to `browser-passkey` (if missing)
+5. ✅ Set realm Browser Flow to `browser-passkey`
+6. ✅ Verify custom flow existence and realm Browser Flow assignment
+7. ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
+8. ✅ Configure realm `WebAuthn Passwordless` for localhost development
+9. ✅ Create the `web-app` client with OAuth/OIDC configuration
+10. ✅ Generate and display the client secret
+11. ✅ Create test users with passwords (non-temporary)
 
 ## Quick Usage
 
@@ -86,6 +89,13 @@ npm run setup-keycloak
 - **Brute Force Protection**: Enabled
 - **SSL Requirement**: None (development mode)
 
+### Authentication Flow
+
+- **Source Flow**: `browser`
+- **Custom Flow**: `browser-passkey`
+- **Realm Browser Flow**: `browser-passkey`
+- **Idempotent Behavior**: If `browser-passkey` already exists, script keeps it and continues
+
 ### Required Action: WebAuthn Register Passwordless
 
 - **Availability**: Enabled at realm level
@@ -137,6 +147,11 @@ Client Secret: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 Update your docker-compose.yml backend environment:
 KEYCLOAK_CLIENT_SECRET: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
+
+The script also prints verification logs confirming:
+
+- `browser-passkey` appears in Authentication Flows
+- Realm Browser Flow is set to `browser-passkey`
 
 ### 2. Update Backend Configuration
 

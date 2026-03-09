@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "setup-keycloak": "node scripts/setup-keycloak.js",
+    "setup-passkey-realm": "node scripts/setup-passkey-realm.js",
     "start": "docker-compose up -d",
     "stop": "docker-compose down",
     "restart": "docker-compose restart",

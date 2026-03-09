@@ -17,6 +17,8 @@ This guide walks you through setting up Keycloak for the demo application.
 
 3. Open your browser and navigate to: <http://localhost:8080>
 
+If you ran an automated setup via Docker Compose, it may print a URL using `http://keycloak:8080`. That hostname is internal to Docker, so use `http://localhost:8080` in your browser.
+
 4. Click **"Administration Console"**
 
 5. Login with default credentials:

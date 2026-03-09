@@ -41,6 +41,8 @@ The script will:
 - ✅ Set it to `Enabled`
 - ✅ Configure default login theme (`keycloak`)
 - ✅ Configure `WebAuthn Passwordless` localhost policy
+- ✅ Create `browser-passkey` by copying the built-in `browser` flow (if needed)
+- ✅ Set realm Browser Flow to `browser-passkey`
 - ✅ Verify the realm is accessible
 
 If the realm already exists, the script will update it to enforce `Enabled` and the default login theme.
@@ -102,10 +104,10 @@ http://localhost:8080/realms/dev-passkeys/.well-known/openid-configuration
 
 ### Configure Passkey Authentication
 
-1. Go to Admin Console → Authentication
-2. Create a new authentication flow for passkeys
-3. Add the WebAuthn authenticator
-4. Configure browser flow to use passkeys
+1. Run the setup script (it now creates and applies `browser-passkey` automatically)
+2. Go to Admin Console → Authentication → Flows and confirm `browser-passkey` exists
+3. Open Realm Settings (or Authentication bindings) and confirm Browser Flow is `browser-passkey`
+4. If you want stricter passkey-only behavior, customize executions inside `browser-passkey`
 
 ### Create Test Users
 
@@ -128,6 +130,8 @@ http://localhost:8080/realms/dev-passkeys/.well-known/openid-configuration
 - [ ] Realm `dev-passkeys` exists in Keycloak
 - [ ] Realm is set to Enabled
 - [ ] Login theme is set to default (`keycloak`)
+- [ ] Authentication flow `browser-passkey` exists
+- [ ] Realm Browser Flow is set to `browser-passkey`
 - [ ] Admin console loads without errors
 - [ ] Can access realm login page
 - [ ] OpenID configuration endpoint is accessible

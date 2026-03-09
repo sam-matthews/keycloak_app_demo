@@ -36,8 +36,6 @@ This application follows microservices best practices with containerized service
 
 The fastest way to get started is using the automated setup script:
 
-Environment defaults (including WebAuthn Passwordless overrides) are documented in `.env.example` at the repository root.
-
 ```bash
 # 1. Clone and navigate to the repository
 git clone <repository-url>
@@ -53,8 +51,6 @@ npm run setup-keycloak
 The script will automatically:
 - ✅ Wait for Keycloak to be ready
 - ✅ Create the `demo-realm`
-- ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
-- ✅ Configure realm `WebAuthn Passwordless` for localhost (`localhost`, `Mac App Dev`, `http://localhost:8080`)
 - ✅ Create the `web-app` client
 - ✅ Generate and display the client secret
 - ✅ Create 3 test users with passwords
@@ -74,8 +70,6 @@ After the script completes:
 ```bash
 docker-compose run --rm keycloak-setup
 ```
-
-If you run setup via Docker Compose, any printed admin console URL using `http://keycloak:8080` is only valid inside the Docker network. Use `http://localhost:8080` in your browser.
 
 ### Option 2: Manual Setup
 
@@ -101,7 +95,6 @@ npm run logs:keycloak       # View Keycloak logs only
 - [Quick Start Guide](doc/QUICKSTART.md) - Get running in 5 minutes
 - [Automated Setup Guide](doc/AUTOMATED_SETUP.md) - Complete guide for automated Keycloak setup
 - [Manual Setup Guide](doc/KEYCLOAK_SETUP.md) - Step-by-step manual configuration
-- [Passkey Realm Setup](doc/PASSKEY_REALM_SETUP.md) - Create development realm for passkey testing
 - [Project Guidelines](.github/copilot-instructions.md) - Development best practices
 
 ## Development

@@ -18,16 +18,6 @@ const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin123';
 const REALM_NAME = process.env.KEYCLOAK_REALM || 'demo-realm';
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || 'web-app';
-const SOURCE_BROWSER_FLOW_ALIAS = 'browser';
-const TARGET_BROWSER_FLOW_ALIAS = 'browser-passkey';
-const PASSWORDLESS_REQUIRED_ACTION_ALIAS = 'webauthn-register-passwordless';
-const WEBAUTHN_PASSWORDLESS_RP_ID = process.env.WEBAUTHN_PASSWORDLESS_RP_ID || 'localhost';
-const WEBAUTHN_PASSWORDLESS_RP_NAME = process.env.WEBAUTHN_PASSWORDLESS_RP_NAME || 'Mac App Dev';
-const WEBAUTHN_PASSWORDLESS_ORIGIN = process.env.WEBAUTHN_PASSWORDLESS_ORIGIN || 'http://localhost:8080';
-const WEBAUTHN_PASSWORDLESS_USER_VERIFICATION =
-  process.env.WEBAUTHN_PASSWORDLESS_USER_VERIFICATION || 'preferred';
-const WEBAUTHN_PASSWORDLESS_ATTESTATION =
-  process.env.WEBAUTHN_PASSWORDLESS_ATTESTATION || 'none';
 
 // Color codes for terminal output
 const colors = {
@@ -41,27 +31,6 @@ const colors = {
 
 function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
-}
-
-function getHostKeycloakBaseUrl() {
-  try {
-    const urlObj = new URL(KEYCLOAK_URL);
-    if (urlObj.hostname === 'keycloak') {
-      urlObj.hostname = 'localhost';
-      return urlObj.toString().replace(/\/$/, '');
-    }
-  } catch (error) {
-    return null;
-  }
-  return null;
-}
-
-function getHostAdminConsoleUrl() {
-  const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
-  if (!hostKeycloakBaseUrl) {
-    return null;
-  }
-  return `${hostKeycloakBaseUrl}/admin/master/console/#/${REALM_NAME}`;
 }
 
 function makeRequest(url, options = {}) {
@@ -216,51 +185,24 @@ async function createRealm(token) {
 async function createClient(token) {
   log(`\n🔧 Creating client: ${CLIENT_ID}...`, 'yellow');
 
-  // macOS OIDC client config
-  let clientConfig;
-  if (CLIENT_ID === 'macos-app') {
-    clientConfig = {
-      clientId: CLIENT_ID,
-      name: 'macOS App',
-      description: 'OIDC client for macOS app',
-      enabled: true,
-      protocol: 'openid-connect',
-      publicClient: true, // No client secret, public client
-      standardFlowEnabled: true, // Authorization Code Flow
-      directAccessGrantsEnabled: false,
-      serviceAccountsEnabled: false,
-      authorizationServicesEnabled: false,
-      redirectUris: [
-        'myapp://auth/callback',
-        'http://localhost/*',
-      ],
-      webOrigins: [],
-      attributes: {
-        'pkce.code.challenge.method': 'S256',
-        'post.logout.redirect.uris': 'myapp://auth/callback http://localhost/*',
-      },
-    };
-  } else {
-    // Default (web-app)
-    clientConfig = {
-      clientId: CLIENT_ID,
-      name: 'Web Application',
-      description: 'React frontend application',
-      enabled: true,
-      protocol: 'openid-connect',
-      publicClient: true,  // Browser apps must be public clients
-      standardFlowEnabled: true,
-      directAccessGrantsEnabled: true,
-      serviceAccountsEnabled: false,
-      authorizationServicesEnabled: false,
-      redirectUris: ['http://localhost:3000/*'],
-      webOrigins: ['http://localhost:3000'],
-      attributes: {
-        'pkce.code.challenge.method': 'S256',
-        'post.logout.redirect.uris': 'http://localhost:3000/*',
-      },
-    };
-  }
+  const clientConfig = {
+    clientId: CLIENT_ID,
+    name: 'Web Application',
+    description: 'React frontend application',
+    enabled: true,
+    protocol: 'openid-connect',
+    publicClient: true,  // Browser apps must be public clients
+    standardFlowEnabled: true,
+    directAccessGrantsEnabled: true,
+    serviceAccountsEnabled: false,
+    authorizationServicesEnabled: false,
+    redirectUris: ['http://localhost:3000/*'],
+    webOrigins: ['http://localhost:3000'],
+    attributes: {
+      'pkce.code.challenge.method': 'S256',
+      'post.logout.redirect.uris': 'http://localhost:3000/*',
+    },
+  };
 
   try {
     const response = await makeRequest(
@@ -284,300 +226,6 @@ async function createClient(token) {
       return null;
     }
     log(`✗ Failed to create client: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-async function ensurePasswordlessRequiredAction(token) {
-  log('\n🔐 Ensuring required action is available: WebAuthn Register Passwordless...', 'yellow');
-
-  try {
-    const response = await makeRequest(
-      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/required-actions`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      }
-    );
-
-    const requiredActions = Array.isArray(response.data) ? response.data : [];
-    const targetAction = requiredActions.find((action) => {
-      const alias = String(action.alias || '').toLowerCase();
-      const name = String(action.name || '').toLowerCase();
-      const providerId = String(action.providerId || '').toLowerCase();
-
-      return (
-        alias === PASSWORDLESS_REQUIRED_ACTION_ALIAS ||
-        providerId === PASSWORDLESS_REQUIRED_ACTION_ALIAS ||
-        name === 'webauthn register passwordless'
-      );
-    });
-
-    if (!targetAction) {
-      const availableAliases = requiredActions
-        .map((action) => action.alias)
-        .filter(Boolean)
-        .join(', ');
-      throw new Error(
-        `Required action 'WebAuthn Register Passwordless' is not available in realm '${REALM_NAME}'. Available aliases: ${availableAliases || 'none'}`
-      );
-    }
-
-    const actionAlias = targetAction.alias || PASSWORDLESS_REQUIRED_ACTION_ALIAS;
-    const shouldEnable = targetAction.enabled !== true;
-    const shouldDisableDefault = targetAction.defaultAction !== false;
-
-    if (!shouldEnable && !shouldDisableDefault) {
-      log('✓ Required action already enabled and not default', 'green');
-      return;
-    }
-
-    await makeRequest(
-      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/required-actions/${encodeURIComponent(actionAlias)}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: {
-          ...targetAction,
-          enabled: true,
-          defaultAction: false,
-        },
-      }
-    );
-
-    log('✓ Required action configured (enabled=true, defaultAction=false)', 'green');
-  } catch (error) {
-    log(`✗ Failed to configure passwordless required action: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-async function configureWebAuthnPasswordlessPolicy(token) {
-  log('\n🔑 Configuring WebAuthn Passwordless policy for localhost...', 'yellow');
-
-  const policyUpdate = {
-    webAuthnPolicyPasswordlessRpId: WEBAUTHN_PASSWORDLESS_RP_ID,
-    webAuthnPolicyPasswordlessRpEntityName: WEBAUTHN_PASSWORDLESS_RP_NAME,
-    webAuthnPolicyPasswordlessExtraOrigins: [WEBAUTHN_PASSWORDLESS_ORIGIN],
-    webAuthnPolicyPasswordlessUserVerificationRequirement:
-      WEBAUTHN_PASSWORDLESS_USER_VERIFICATION,
-    webAuthnPolicyPasswordlessAttestationConveyancePreference:
-      WEBAUTHN_PASSWORDLESS_ATTESTATION,
-  };
-
-  try {
-    await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: policyUpdate,
-    });
-    log('✓ WebAuthn Passwordless policy updated', 'green');
-  } catch (error) {
-    log(`✗ Failed to configure WebAuthn Passwordless policy: ${error.message}`, 'red');
-    throw error;
-  }
-}
-
-async function getAuthenticationFlows(token) {
-  const response = await makeRequest(
-    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows`,
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    }
-  );
-
-  return Array.isArray(response.data) ? response.data : [];
-}
-
-function findFlowByAlias(flows, alias) {
-  const normalizedAlias = String(alias || '').toLowerCase();
-  return flows.find((flow) => String(flow.alias || '').toLowerCase() === normalizedAlias);
-}
-
-async function copyBrowserFlowIfMissing(token, sourceAlias, targetAlias) {
-  log(`\n🧩 Ensuring custom browser flow exists: ${targetAlias}...`, 'yellow');
-
-  const flows = await getAuthenticationFlows(token);
-  const existingTarget = findFlowByAlias(flows, targetAlias);
-  if (existingTarget) {
-    log(`✓ Authentication flow '${targetAlias}' already exists`, 'green');
-    return;
-  }
-
-  const sourceFlow = findFlowByAlias(flows, sourceAlias);
-  if (!sourceFlow) {
-    throw new Error(`Source authentication flow '${sourceAlias}' was not found`);
-  }
-
-  await makeRequest(
-    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(sourceFlow.alias)}/copy`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: {
-        newName: targetAlias,
-      },
-    }
-  );
-
-  log(`✓ Authentication flow '${targetAlias}' created from '${sourceFlow.alias}'`, 'green');
-}
-
-async function verifyFlowExists(token, flowAlias) {
-  log(`\n✅ Verifying authentication flow exists: ${flowAlias}...`, 'yellow');
-
-  const flows = await getAuthenticationFlows(token);
-  const flow = findFlowByAlias(flows, flowAlias);
-  if (!flow) {
-    throw new Error(`Authentication flow '${flowAlias}' was not found after setup`);
-  }
-
-  log(`✓ Authentication flow '${flowAlias}' is present`, 'green');
-}
-
-async function getRealmConfig(token) {
-  const response = await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  return response.data || {};
-}
-
-async function setRealmBrowserFlow(token, flowAlias) {
-  log(`\n🔁 Setting realm browser flow to '${flowAlias}'...`, 'yellow');
-
-  const realmConfig = await getRealmConfig(token);
-  const currentFlow = String(realmConfig.browserFlow || '');
-  if (currentFlow.toLowerCase() === String(flowAlias).toLowerCase()) {
-    log(`✓ Realm browser flow already set to '${flowAlias}'`, 'green');
-    return;
-  }
-
-  await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: {
-      browserFlow: flowAlias,
-    },
-  });
-
-  log(`✓ Realm browser flow set to '${flowAlias}'`, 'green');
-}
-
-async function verifyRealmBrowserFlow(token, flowAlias) {
-  log(`\n✅ Verifying realm uses browser flow '${flowAlias}'...`, 'yellow');
-
-  const realmConfig = await getRealmConfig(token);
-  const currentFlow = String(realmConfig.browserFlow || '');
-
-  if (currentFlow.toLowerCase() !== String(flowAlias).toLowerCase()) {
-    throw new Error(
-      `Realm browser flow verification failed. Expected '${flowAlias}', got '${realmConfig.browserFlow || 'empty'}'`
-    );
-  }
-
-  log(`✓ Realm browser flow is '${realmConfig.browserFlow}'`, 'green');
-}
-
-function toOriginList(value) {
-  if (!value) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
-  }
-
-  return String(value)
-    .split(/[\s,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-async function verifyWebAuthnPasswordlessPolicy(token) {
-  log('\n✅ Verifying WebAuthn Passwordless policy persisted...', 'yellow');
-
-  try {
-    const response = await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    const realm = response.data || {};
-    const savedOrigins = toOriginList(realm.webAuthnPolicyPasswordlessExtraOrigins);
-
-    const checks = [
-      {
-        label: 'RP ID',
-        actual: realm.webAuthnPolicyPasswordlessRpId,
-        expected: WEBAUTHN_PASSWORDLESS_RP_ID,
-      },
-      {
-        label: 'RP Name',
-        actual: realm.webAuthnPolicyPasswordlessRpEntityName,
-        expected: WEBAUTHN_PASSWORDLESS_RP_NAME,
-      },
-      {
-        label: 'User Verification',
-        actual: realm.webAuthnPolicyPasswordlessUserVerificationRequirement,
-        expected: WEBAUTHN_PASSWORDLESS_USER_VERIFICATION,
-      },
-      {
-        label: 'Attestation Conveyance',
-        actual: realm.webAuthnPolicyPasswordlessAttestationConveyancePreference,
-        expected: WEBAUTHN_PASSWORDLESS_ATTESTATION,
-      },
-    ];
-
-    for (const check of checks) {
-      if (check.actual !== check.expected) {
-        throw new Error(
-          `${check.label} verification failed. Expected '${check.expected}', got '${check.actual}'`
-        );
-      }
-    }
-
-    if (!savedOrigins.includes(WEBAUTHN_PASSWORDLESS_ORIGIN)) {
-      throw new Error(
-        `Origin verification failed. Expected '${WEBAUTHN_PASSWORDLESS_ORIGIN}' in [${savedOrigins.join(', ')}]`
-      );
-    }
-
-    log(`✓ RP ID: ${realm.webAuthnPolicyPasswordlessRpId}`, 'green');
-    log(`✓ RP Name: ${realm.webAuthnPolicyPasswordlessRpEntityName}`, 'green');
-    log(`✓ Origin includes: ${WEBAUTHN_PASSWORDLESS_ORIGIN}`, 'green');
-    log(
-      `✓ User Verification: ${realm.webAuthnPolicyPasswordlessUserVerificationRequirement}`,
-      'green'
-    );
-    log(
-      `✓ Attestation: ${realm.webAuthnPolicyPasswordlessAttestationConveyancePreference}`,
-      'green'
-    );
-  } catch (error) {
-    log(`✗ Failed to verify WebAuthn Passwordless policy: ${error.message}`, 'red');
     throw error;
   }
 }
@@ -646,31 +294,10 @@ async function main() {
     // Step 3: Create realm
     await createRealm(token);
 
-    // Step 4: Ensure custom browser authentication flow exists
-    await copyBrowserFlowIfMissing(token, SOURCE_BROWSER_FLOW_ALIAS, TARGET_BROWSER_FLOW_ALIAS);
-
-    // Step 5: Verify custom browser flow exists
-    await verifyFlowExists(token, TARGET_BROWSER_FLOW_ALIAS);
-
-    // Step 6: Set realm browser flow to the custom flow
-    await setRealmBrowserFlow(token, TARGET_BROWSER_FLOW_ALIAS);
-
-    // Step 7: Verify realm browser flow
-    await verifyRealmBrowserFlow(token, TARGET_BROWSER_FLOW_ALIAS);
-
-    // Step 8: Ensure passwordless required action availability
-    await ensurePasswordlessRequiredAction(token);
-
-    // Step 9: Configure WebAuthn Passwordless realm policy
-    await configureWebAuthnPasswordlessPolicy(token);
-
-    // Step 10: Verify WebAuthn Passwordless policy
-    await verifyWebAuthnPasswordlessPolicy(token);
-
-    // Step 11: Create client
+    // Step 4: Create client
     const clientSecret = await createClient(token);
 
-    // Step 12: Create test users
+    // Step 5: Create test users
     log('\n👥 Creating test users...', 'yellow');
     
     const users = [
@@ -715,19 +342,6 @@ async function main() {
 
     log('\n📝 Summary:', 'yellow');
     log(`✓ Realm: ${REALM_NAME}`, 'green');
-    log(`✓ Browser Flow: ${TARGET_BROWSER_FLOW_ALIAS}`, 'green');
-    log('✓ Required Action: WebAuthn Register Passwordless (enabled, not default)', 'green');
-    log(`✓ WebAuthn Passwordless RP ID: ${WEBAUTHN_PASSWORDLESS_RP_ID}`, 'green');
-    log(`✓ WebAuthn Passwordless RP Name: ${WEBAUTHN_PASSWORDLESS_RP_NAME}`, 'green');
-    log(`✓ WebAuthn Passwordless Origin: ${WEBAUTHN_PASSWORDLESS_ORIGIN}`, 'green');
-    log(
-      `✓ WebAuthn Passwordless User Verification: ${WEBAUTHN_PASSWORDLESS_USER_VERIFICATION}`,
-      'green'
-    );
-    log(
-      `✓ WebAuthn Passwordless Attestation: ${WEBAUTHN_PASSWORDLESS_ATTESTATION}`,
-      'green'
-    );
     log(`✓ Client: ${CLIENT_ID}`, 'green');
     log(`✓ Users created: ${users.length}`, 'green');
 
@@ -745,18 +359,7 @@ async function main() {
     log('\n🎉 You can now access the application:', 'green');
     log('   Frontend: http://localhost:3000', 'cyan');
     log('   Keycloak: http://localhost:8080', 'cyan');
-    const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
-    if (hostKeycloakBaseUrl) {
-      log(`   Keycloak (host): ${hostKeycloakBaseUrl}`, 'yellow');
-    }
     log('   Backend API: http://localhost:3001', 'cyan');
-
-    log('\n🔗 Admin Console:', 'yellow');
-    log(`   ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');
-    const hostAdminConsoleUrl = getHostAdminConsoleUrl();
-    if (hostAdminConsoleUrl) {
-      log(`   (Host): ${hostAdminConsoleUrl}`, 'yellow');
-    }
 
   } catch (error) {
     log('\n✗ Setup failed:', 'red');

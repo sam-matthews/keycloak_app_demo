@@ -16,6 +16,16 @@ const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const KEYCLOAK_ADMIN = process.env.KEYCLOAK_ADMIN || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin123';
 const REALM_NAME = 'dev-passkeys';
+const SOURCE_BROWSER_FLOW_ALIAS = 'browser';
+const TARGET_BROWSER_FLOW_ALIAS = 'browser-passkey';
+const PASSWORDLESS_REQUIRED_ACTION_ALIAS = 'webauthn-register-passwordless';
+const COOKIE_AUTHENTICATOR_LABEL = 'Cookie';
+const IDP_REDIRECTOR_LABEL = 'Identity Provider Redirector';
+const USERNAME_PASSWORD_FORM_LABEL = 'Username Password Form';
+const WEBAUTHN_PASSWORDLESS_LABEL = 'WebAuthn Passwordless Authenticator';
+const WEBAUTHN_PASSWORDLESS_PROVIDER_ID = 'webauthn-authenticator-passwordless';
+const REQUIREMENT_REQUIRED = 'REQUIRED';
+const REQUIREMENT_ALTERNATIVE = 'ALTERNATIVE';
 const WEBAUTHN_PASSWORDLESS_RP_ID = process.env.WEBAUTHN_PASSWORDLESS_RP_ID || 'localhost';
 const WEBAUTHN_PASSWORDLESS_RP_NAME = process.env.WEBAUTHN_PASSWORDLESS_RP_NAME || 'Mac App Dev';
 const WEBAUTHN_PASSWORDLESS_ORIGIN = process.env.WEBAUTHN_PASSWORDLESS_ORIGIN || 'http://localhost:8080';
@@ -255,6 +265,416 @@ async function verifyRealm(token) {
   }
 }
 
+async function getAuthenticationFlows(token) {
+  const response = await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+function findFlowByAlias(flows, alias) {
+  const normalizedAlias = String(alias || '').toLowerCase();
+  return flows.find((flow) => String(flow.alias || '').toLowerCase() === normalizedAlias);
+}
+
+async function copyBrowserFlowIfMissing(token, sourceAlias, targetAlias) {
+  log(`\n🧩 Ensuring custom browser flow exists: ${targetAlias}...`, 'yellow');
+
+  const flows = await getAuthenticationFlows(token);
+  const existingTarget = findFlowByAlias(flows, targetAlias);
+  if (existingTarget) {
+    log(`✓ Authentication flow '${targetAlias}' already exists`, 'green');
+    return;
+  }
+
+  const sourceFlow = findFlowByAlias(flows, sourceAlias);
+  if (!sourceFlow) {
+    throw new Error(`Source authentication flow '${sourceAlias}' was not found`);
+  }
+
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(sourceFlow.alias)}/copy`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: {
+        newName: targetAlias,
+      },
+    }
+  );
+
+  log(`✓ Authentication flow '${targetAlias}' created from '${sourceFlow.alias}'`, 'green');
+}
+
+async function verifyFlowExists(token, flowAlias) {
+  log(`\n✅ Verifying authentication flow exists: ${flowAlias}...`, 'yellow');
+
+  const flows = await getAuthenticationFlows(token);
+  const flow = findFlowByAlias(flows, flowAlias);
+  if (!flow) {
+    throw new Error(`Authentication flow '${flowAlias}' was not found after setup`);
+  }
+
+  log(`✓ Authentication flow '${flowAlias}' is present`, 'green');
+}
+
+async function getRealmConfig(token) {
+  const response = await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  return response.data || {};
+}
+
+async function setRealmBrowserFlow(token, flowAlias) {
+  log(`\n🔁 Setting realm browser flow to '${flowAlias}'...`, 'yellow');
+
+  const realmConfig = await getRealmConfig(token);
+  const currentFlow = String(realmConfig.browserFlow || '');
+  if (currentFlow.toLowerCase() === String(flowAlias).toLowerCase()) {
+    log(`✓ Realm browser flow already set to '${flowAlias}'`, 'green');
+    return;
+  }
+
+  await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: {
+      browserFlow: flowAlias,
+    },
+  });
+
+  log(`✓ Realm browser flow set to '${flowAlias}'`, 'green');
+}
+
+async function verifyRealmBrowserFlow(token, flowAlias) {
+  log(`\n✅ Verifying realm uses browser flow '${flowAlias}'...`, 'yellow');
+
+  const realmConfig = await getRealmConfig(token);
+  const currentFlow = String(realmConfig.browserFlow || '');
+
+  if (currentFlow.toLowerCase() !== String(flowAlias).toLowerCase()) {
+    throw new Error(
+      `Realm browser flow verification failed. Expected '${flowAlias}', got '${realmConfig.browserFlow || 'empty'}'`
+    );
+  }
+
+  log(`✓ Realm browser flow is '${realmConfig.browserFlow}'`, 'green');
+}
+
+function normalizeExecutionValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function toExecutionSearchText(execution) {
+  const parts = [
+    execution.displayName,
+    execution.authenticator,
+    execution.authenticatorFlow,
+    execution.providerId,
+    execution.provider,
+    execution.requirement,
+    execution.alias,
+  ];
+
+  return parts
+    .map((item) => normalizeExecutionValue(item))
+    .filter(Boolean)
+    .join(' | ');
+}
+
+function findExecutions(executions, candidates) {
+  const normalizedCandidates = candidates.map((candidate) => normalizeExecutionValue(candidate));
+
+  return executions.filter((execution) => {
+    const searchText = toExecutionSearchText(execution);
+    return normalizedCandidates.some((candidate) => searchText.includes(candidate));
+  });
+}
+
+function findFirstExecution(executions, candidates) {
+  const matches = findExecutions(executions, candidates);
+  return matches.length > 0 ? matches[0] : null;
+}
+
+async function getFlowExecutions(token, flowAlias) {
+  const response = await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(flowAlias)}/executions`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+async function addExecutionToFlow(token, flowAlias, providerId) {
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(flowAlias)}/executions/execution`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: {
+        provider: providerId,
+      },
+    }
+  );
+}
+
+async function updateExecutionRequirement(token, flowAlias, execution, requirement) {
+  const currentRequirement = normalizeExecutionValue(execution.requirement).toUpperCase();
+  if (currentRequirement === requirement) {
+    return;
+  }
+
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(flowAlias)}/executions`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: {
+        ...execution,
+        requirement,
+      },
+    }
+  );
+}
+
+async function deleteExecution(token, executionId) {
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/executions/${encodeURIComponent(executionId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+}
+
+async function reconcileBrowserPasskeyFlowExecutions(token, flowAlias) {
+  log(`\n🧭 Reconciling executions in '${flowAlias}' for passkey-only login...`, 'yellow');
+
+  let executions = await getFlowExecutions(token, flowAlias);
+
+  const usernameFormExecutions = findExecutions(executions, [
+    USERNAME_PASSWORD_FORM_LABEL,
+    'auth-username-password-form',
+    'username-password-form',
+  ]);
+
+  for (const execution of usernameFormExecutions) {
+    await deleteExecution(token, execution.id);
+  }
+
+  if (usernameFormExecutions.length > 0) {
+    log(`✓ Removed ${usernameFormExecutions.length} username/password execution(s)`, 'green');
+    executions = await getFlowExecutions(token, flowAlias);
+  } else {
+    log('✓ Username/password form execution is already absent', 'green');
+  }
+
+  let passwordlessExecution = findFirstExecution(executions, [
+    WEBAUTHN_PASSWORDLESS_LABEL,
+    WEBAUTHN_PASSWORDLESS_PROVIDER_ID,
+  ]);
+
+  if (!passwordlessExecution) {
+    await addExecutionToFlow(token, flowAlias, WEBAUTHN_PASSWORDLESS_PROVIDER_ID);
+    executions = await getFlowExecutions(token, flowAlias);
+    passwordlessExecution = findFirstExecution(executions, [
+      WEBAUTHN_PASSWORDLESS_LABEL,
+      WEBAUTHN_PASSWORDLESS_PROVIDER_ID,
+    ]);
+  }
+
+  if (!passwordlessExecution) {
+    throw new Error(
+      `Could not locate '${WEBAUTHN_PASSWORDLESS_LABEL}' execution in flow '${flowAlias}' after attempting to add it`
+    );
+  }
+
+  await updateExecutionRequirement(token, flowAlias, passwordlessExecution, REQUIREMENT_REQUIRED);
+  log(`✓ '${WEBAUTHN_PASSWORDLESS_LABEL}' is set to ${REQUIREMENT_REQUIRED}`, 'green');
+
+  executions = await getFlowExecutions(token, flowAlias);
+
+  const cookieExecution = findFirstExecution(executions, [
+    COOKIE_AUTHENTICATOR_LABEL,
+    'auth-cookie',
+  ]);
+  if (!cookieExecution) {
+    throw new Error(`'${COOKIE_AUTHENTICATOR_LABEL}' execution was not found in flow '${flowAlias}'`);
+  }
+  await updateExecutionRequirement(token, flowAlias, cookieExecution, REQUIREMENT_ALTERNATIVE);
+  log(`✓ '${COOKIE_AUTHENTICATOR_LABEL}' is set to ${REQUIREMENT_ALTERNATIVE}`, 'green');
+
+  const idpExecution = findFirstExecution(executions, [
+    IDP_REDIRECTOR_LABEL,
+    'identity-provider-redirector',
+    'idp-redirector',
+  ]);
+  if (!idpExecution) {
+    throw new Error(`'${IDP_REDIRECTOR_LABEL}' execution was not found in flow '${flowAlias}'`);
+  }
+  await updateExecutionRequirement(token, flowAlias, idpExecution, REQUIREMENT_ALTERNATIVE);
+  log(`✓ '${IDP_REDIRECTOR_LABEL}' is kept optional (${REQUIREMENT_ALTERNATIVE})`, 'green');
+}
+
+async function verifyBrowserPasskeyFlowExecutions(token, flowAlias) {
+  log(`\n✅ Verifying '${flowAlias}' executions for passkey-only login...`, 'yellow');
+
+  const executions = await getFlowExecutions(token, flowAlias);
+
+  const usernameFormExecutions = findExecutions(executions, [
+    USERNAME_PASSWORD_FORM_LABEL,
+    'auth-username-password-form',
+    'username-password-form',
+  ]);
+  if (usernameFormExecutions.length > 0) {
+    throw new Error(`Verification failed: '${USERNAME_PASSWORD_FORM_LABEL}' execution is still present`);
+  }
+
+  const passwordlessExecution = findFirstExecution(executions, [
+    WEBAUTHN_PASSWORDLESS_LABEL,
+    WEBAUTHN_PASSWORDLESS_PROVIDER_ID,
+  ]);
+  if (!passwordlessExecution) {
+    throw new Error(`Verification failed: '${WEBAUTHN_PASSWORDLESS_LABEL}' execution is missing`);
+  }
+  if (normalizeExecutionValue(passwordlessExecution.requirement).toUpperCase() !== REQUIREMENT_REQUIRED) {
+    throw new Error(
+      `Verification failed: '${WEBAUTHN_PASSWORDLESS_LABEL}' must be ${REQUIREMENT_REQUIRED}, got '${passwordlessExecution.requirement}'`
+    );
+  }
+
+  const cookieExecution = findFirstExecution(executions, [
+    COOKIE_AUTHENTICATOR_LABEL,
+    'auth-cookie',
+  ]);
+  if (!cookieExecution) {
+    throw new Error(`Verification failed: '${COOKIE_AUTHENTICATOR_LABEL}' execution is missing`);
+  }
+  if (normalizeExecutionValue(cookieExecution.requirement).toUpperCase() !== REQUIREMENT_ALTERNATIVE) {
+    throw new Error(
+      `Verification failed: '${COOKIE_AUTHENTICATOR_LABEL}' must be ${REQUIREMENT_ALTERNATIVE}, got '${cookieExecution.requirement}'`
+    );
+  }
+
+  const idpExecution = findFirstExecution(executions, [
+    IDP_REDIRECTOR_LABEL,
+    'identity-provider-redirector',
+    'idp-redirector',
+  ]);
+  if (!idpExecution) {
+    throw new Error(`Verification failed: '${IDP_REDIRECTOR_LABEL}' execution is missing`);
+  }
+  if (normalizeExecutionValue(idpExecution.requirement).toUpperCase() !== REQUIREMENT_ALTERNATIVE) {
+    throw new Error(
+      `Verification failed: '${IDP_REDIRECTOR_LABEL}' must be ${REQUIREMENT_ALTERNATIVE}, got '${idpExecution.requirement}'`
+    );
+  }
+
+  log(`✓ '${USERNAME_PASSWORD_FORM_LABEL}' is not present`, 'green');
+  log(`✓ '${WEBAUTHN_PASSWORDLESS_LABEL}' is ${REQUIREMENT_REQUIRED}`, 'green');
+  log(`✓ '${COOKIE_AUTHENTICATOR_LABEL}' is optional`, 'green');
+  log(`✓ '${IDP_REDIRECTOR_LABEL}' is optional`, 'green');
+}
+
+async function ensurePasswordlessRequiredAction(token) {
+  log('\n🔐 Ensuring required action is available: WebAuthn Register Passwordless...', 'yellow');
+
+  try {
+    const response = await makeRequest(
+      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/required-actions`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    );
+
+    const requiredActions = Array.isArray(response.data) ? response.data : [];
+    const targetAction = requiredActions.find((action) => {
+      const alias = String(action.alias || '').toLowerCase();
+      const name = String(action.name || '').toLowerCase();
+      const providerId = String(action.providerId || '').toLowerCase();
+
+      return (
+        alias === PASSWORDLESS_REQUIRED_ACTION_ALIAS ||
+        providerId === PASSWORDLESS_REQUIRED_ACTION_ALIAS ||
+        name === 'webauthn register passwordless'
+      );
+    });
+
+    if (!targetAction) {
+      const availableAliases = requiredActions
+        .map((action) => action.alias)
+        .filter(Boolean)
+        .join(', ');
+      throw new Error(
+        `Required action 'WebAuthn Register Passwordless' is not available in realm '${REALM_NAME}'. Available aliases: ${availableAliases || 'none'}`
+      );
+    }
+
+    const actionAlias = targetAction.alias || PASSWORDLESS_REQUIRED_ACTION_ALIAS;
+    const shouldEnable = targetAction.enabled !== true;
+    const shouldDisableDefault = targetAction.defaultAction !== false;
+
+    if (!shouldEnable && !shouldDisableDefault) {
+      log('✓ Required action already enabled and not default', 'green');
+      return;
+    }
+
+    await makeRequest(
+      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/required-actions/${encodeURIComponent(actionAlias)}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: {
+          ...targetAction,
+          enabled: true,
+          defaultAction: false,
+        },
+      }
+    );
+
+    log('✓ Required action configured (enabled=true, defaultAction=false)', 'green');
+  } catch (error) {
+    log(`✗ Failed to configure passwordless required action: ${error.message}`, 'red');
+    throw error;
+  }
+}
+
 async function configureWebAuthnPasswordlessPolicy(token) {
   log('\n🔑 Configuring WebAuthn Passwordless policy for localhost...', 'yellow');
 
@@ -388,10 +808,31 @@ async function main() {
     // Step 4: Verify realm
     await verifyRealm(token);
 
-    // Step 5: Configure WebAuthn Passwordless realm policy
+    // Step 5: Ensure custom browser authentication flow exists
+    await copyBrowserFlowIfMissing(token, SOURCE_BROWSER_FLOW_ALIAS, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 6: Verify custom browser flow exists
+    await verifyFlowExists(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 7: Set realm browser flow to the custom flow
+    await setRealmBrowserFlow(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 8: Verify realm browser flow
+    await verifyRealmBrowserFlow(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 9: Reconcile browser-passkey executions for passkey-only login
+    await reconcileBrowserPasskeyFlowExecutions(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 10: Verify browser-passkey executions
+    await verifyBrowserPasskeyFlowExecutions(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 11: Ensure passwordless required action availability
+    await ensurePasswordlessRequiredAction(token);
+
+    // Step 12: Configure WebAuthn Passwordless realm policy
     await configureWebAuthnPasswordlessPolicy(token);
 
-    // Step 6: Verify WebAuthn Passwordless policy
+    // Step 13: Verify WebAuthn Passwordless policy
     await verifyWebAuthnPasswordlessPolicy(token);
 
     // Summary
@@ -403,6 +844,11 @@ async function main() {
     log(`  • Name: ${REALM_NAME}`, 'green');
     log(`  • Status: Enabled`, 'green');
     log(`  • Login Theme: keycloak (default)`, 'green');
+    log(`  • Browser Flow: ${TARGET_BROWSER_FLOW_ALIAS}`, 'green');
+    log(`  • Removed: ${USERNAME_PASSWORD_FORM_LABEL}`, 'green');
+    log(`  • Added: ${WEBAUTHN_PASSWORDLESS_LABEL} (${REQUIREMENT_REQUIRED})`, 'green');
+    log(`  • Kept: ${COOKIE_AUTHENTICATOR_LABEL} (${REQUIREMENT_ALTERNATIVE})`, 'green');
+    log(`  • Kept: ${IDP_REDIRECTOR_LABEL} (${REQUIREMENT_ALTERNATIVE})`, 'green');
     log(`  • Passwordless RP ID: ${WEBAUTHN_PASSWORDLESS_RP_ID}`, 'green');
     log(`  • Passwordless RP Name: ${WEBAUTHN_PASSWORDLESS_RP_NAME}`, 'green');
     log(`  • Passwordless Origin: ${WEBAUTHN_PASSWORDLESS_ORIGIN}`, 'green');
@@ -418,7 +864,7 @@ async function main() {
     if (hostAdminConsoleUrl) {
       log(`     (If running on your host, use: ${hostAdminConsoleUrl})`, 'yellow');
     }
-    log(`  2. Configure passkey authentication flow`, 'cyan');
+    log(`  2. Confirm '${TARGET_BROWSER_FLOW_ALIAS}' has no Username Password Form`, 'cyan');
     log(`  3. Create test users for passkey testing`, 'cyan');
 
     log('\n🔗 Access URLs:', 'green');

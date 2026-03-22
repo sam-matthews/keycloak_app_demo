@@ -21,6 +21,25 @@ const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || 'web-app';
 const SOURCE_BROWSER_FLOW_ALIAS = 'browser';
 const TARGET_BROWSER_FLOW_ALIAS = 'browser-passkey';
 const PASSWORDLESS_REQUIRED_ACTION_ALIAS = 'webauthn-register-passwordless';
+const USERNAME_PASSWORD_PROVIDER_ID = 'auth-username-password-form';
+const COOKIE_AUTHENTICATOR_LABEL = 'Cookie';
+const IDP_REDIRECTOR_LABEL = 'Identity Provider Redirector';
+const USERNAME_PASSWORD_FORM_LABEL = 'Username Password Form';
+const WEBAUTHN_PASSWORDLESS_LABEL = 'WebAuthn Passwordless Authenticator';
+const WEBAUTHN_PASSWORDLESS_PROVIDER_ID = 'webauthn-authenticator-passwordless';
+const CONDITIONAL_OTP_FLOW_LABEL = 'Conditional OTP';
+const CONDITIONAL_USER_CONFIGURED_PROVIDER_ID = 'conditional-user-configured';
+const OTP_FORM_PROVIDER_ID = 'auth-otp-form';
+const REQUIREMENT_REQUIRED = 'REQUIRED';
+const REQUIREMENT_ALTERNATIVE = 'ALTERNATIVE';
+const LOGIN_MODE_PASSKEY_ONLY = 'passkey-only';
+const LOGIN_MODE_MULTI_OPTION = 'multi-option';
+const KEYCLOAK_LOGIN_MODE =
+  (process.env.KEYCLOAK_LOGIN_MODE || LOGIN_MODE_MULTI_OPTION).toLowerCase();
+const GOOGLE_IDP_CLIENT_ID = process.env.GOOGLE_IDP_CLIENT_ID || '';
+const GOOGLE_IDP_CLIENT_SECRET = process.env.GOOGLE_IDP_CLIENT_SECRET || '';
+const APPLE_IDP_CLIENT_ID = process.env.APPLE_IDP_CLIENT_ID || '';
+const APPLE_IDP_CLIENT_SECRET = process.env.APPLE_IDP_CLIENT_SECRET || '';
 const WEBAUTHN_PASSWORDLESS_RP_ID = process.env.WEBAUTHN_PASSWORDLESS_RP_ID || 'localhost';
 const WEBAUTHN_PASSWORDLESS_RP_NAME = process.env.WEBAUTHN_PASSWORDLESS_RP_NAME || 'Mac App Dev';
 const WEBAUTHN_PASSWORDLESS_ORIGIN = process.env.WEBAUTHN_PASSWORDLESS_ORIGIN || 'http://localhost:8080';
@@ -41,6 +60,18 @@ const colors = {
 
 function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
+}
+
+function isPasskeyOnlyMode() {
+  return KEYCLOAK_LOGIN_MODE === LOGIN_MODE_PASSKEY_ONLY;
+}
+
+function getDesiredPasswordlessRequirement() {
+  return isPasskeyOnlyMode() ? REQUIREMENT_REQUIRED : REQUIREMENT_ALTERNATIVE;
+}
+
+function getDesiredUsernamePasswordRequirement() {
+  return isPasskeyOnlyMode() ? 'ABSENT' : REQUIREMENT_ALTERNATIVE;
 }
 
 function getHostKeycloakBaseUrl() {
@@ -183,7 +214,7 @@ async function createRealm(token) {
     realm: REALM_NAME,
     enabled: true,
     displayName: 'Demo Realm',
-    registrationAllowed: false,
+    registrationAllowed: !isPasskeyOnlyMode(),
     loginWithEmailAllowed: true,
     duplicateEmailsAllowed: false,
     resetPasswordAllowed: true,
@@ -210,6 +241,139 @@ async function createRealm(token) {
     }
     log(`✗ Failed to create realm: ${error.message}`, 'red');
     throw error;
+  }
+}
+
+async function updateRealmSettings(token) {
+  log(`\n⚙️  Enforcing realm settings for mode '${KEYCLOAK_LOGIN_MODE}'...`, 'yellow');
+
+  const realmConfig = {
+    enabled: true,
+    registrationAllowed: !isPasskeyOnlyMode(),
+    loginWithEmailAllowed: true,
+    duplicateEmailsAllowed: false,
+    resetPasswordAllowed: true,
+    editUsernameAllowed: false,
+    bruteForceProtected: true,
+    sslRequired: 'none',
+  };
+
+  await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: realmConfig,
+  });
+
+  log(
+    `✓ Realm settings applied (registrationAllowed=${realmConfig.registrationAllowed})`,
+    'green'
+  );
+}
+
+async function getIdentityProviderInstances(token) {
+  const response = await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/identity-provider/instances`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+async function upsertIdentityProvider(token, provider) {
+  const providers = await getIdentityProviderInstances(token);
+  const existing = providers.find(
+    (item) => String(item.alias || '').toLowerCase() === String(provider.alias || '').toLowerCase()
+  );
+
+  if (existing) {
+    await makeRequest(
+      `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${encodeURIComponent(provider.alias)}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: {
+          ...existing,
+          ...provider,
+        },
+      }
+    );
+    log(`✓ Updated identity provider '${provider.alias}'`, 'green');
+    return;
+  }
+
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/identity-provider/instances`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: provider,
+    }
+  );
+
+  log(`✓ Created identity provider '${provider.alias}'`, 'green');
+}
+
+async function ensureSocialIdentityProviders(token) {
+  log('\n🌐 Configuring optional social identity providers...', 'yellow');
+
+  if (GOOGLE_IDP_CLIENT_ID && GOOGLE_IDP_CLIENT_SECRET) {
+    await upsertIdentityProvider(token, {
+      alias: 'google',
+      providerId: 'google',
+      displayName: 'Google',
+      enabled: true,
+      trustEmail: true,
+      storeToken: false,
+      addReadTokenRoleOnCreate: false,
+      authenticateByDefault: false,
+      firstBrokerLoginFlowAlias: 'first broker login',
+      config: {
+        clientId: GOOGLE_IDP_CLIENT_ID,
+        clientSecret: GOOGLE_IDP_CLIENT_SECRET,
+        defaultScope: 'openid profile email',
+      },
+    });
+  } else {
+    log('ℹ Google IdP not configured (set GOOGLE_IDP_CLIENT_ID and GOOGLE_IDP_CLIENT_SECRET)', 'cyan');
+  }
+
+  if (APPLE_IDP_CLIENT_ID && APPLE_IDP_CLIENT_SECRET) {
+    try {
+      await upsertIdentityProvider(token, {
+        alias: 'apple',
+        providerId: 'apple',
+        displayName: 'Apple',
+        enabled: true,
+        trustEmail: true,
+        storeToken: false,
+        addReadTokenRoleOnCreate: false,
+        authenticateByDefault: false,
+        firstBrokerLoginFlowAlias: 'first broker login',
+        config: {
+          clientId: APPLE_IDP_CLIENT_ID,
+          clientSecret: APPLE_IDP_CLIENT_SECRET,
+          defaultScope: 'name email',
+        },
+      });
+    } catch (error) {
+      log(`ℹ Apple IdP was not configured automatically: ${error.message}`, 'cyan');
+    }
+  } else {
+    log('ℹ Apple IdP not configured (set APPLE_IDP_CLIENT_ID and APPLE_IDP_CLIENT_SECRET)', 'cyan');
   }
 }
 
@@ -327,10 +491,14 @@ async function ensurePasswordlessRequiredAction(token) {
 
     const actionAlias = targetAction.alias || PASSWORDLESS_REQUIRED_ACTION_ALIAS;
     const shouldEnable = targetAction.enabled !== true;
-    const shouldDisableDefault = targetAction.defaultAction !== false;
+    const desiredDefaultAction = !isPasskeyOnlyMode();
+    const shouldUpdateDefault = targetAction.defaultAction !== desiredDefaultAction;
 
-    if (!shouldEnable && !shouldDisableDefault) {
-      log('✓ Required action already enabled and not default', 'green');
+    if (!shouldEnable && !shouldUpdateDefault) {
+      log(
+        `✓ Required action already configured (enabled=true, defaultAction=${desiredDefaultAction})`,
+        'green'
+      );
       return;
     }
 
@@ -345,12 +513,15 @@ async function ensurePasswordlessRequiredAction(token) {
         body: {
           ...targetAction,
           enabled: true,
-          defaultAction: false,
+          defaultAction: desiredDefaultAction,
         },
       }
     );
 
-    log('✓ Required action configured (enabled=true, defaultAction=false)', 'green');
+    log(
+      `✓ Required action configured (enabled=true, defaultAction=${desiredDefaultAction})`,
+      'green'
+    );
   } catch (error) {
     log(`✗ Failed to configure passwordless required action: ${error.message}`, 'red');
     throw error;
@@ -497,6 +668,315 @@ async function verifyRealmBrowserFlow(token, flowAlias) {
   }
 
   log(`✓ Realm browser flow is '${realmConfig.browserFlow}'`, 'green');
+}
+
+function normalizeExecutionValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function toExecutionSearchText(execution) {
+  const parts = [
+    execution.displayName,
+    execution.authenticator,
+    execution.authenticatorFlow,
+    execution.providerId,
+    execution.provider,
+    execution.requirement,
+    execution.alias,
+  ];
+
+  return parts
+    .map((item) => normalizeExecutionValue(item))
+    .filter(Boolean)
+    .join(' | ');
+}
+
+function findExecutions(executions, candidates) {
+  const normalizedCandidates = candidates.map((candidate) => normalizeExecutionValue(candidate));
+
+  return executions.filter((execution) => {
+    const searchText = toExecutionSearchText(execution);
+    return normalizedCandidates.some((candidate) => searchText.includes(candidate));
+  });
+}
+
+function findFirstExecution(executions, candidates) {
+  const matches = findExecutions(executions, candidates);
+  return matches.length > 0 ? matches[0] : null;
+}
+
+async function getFlowExecutions(token, flowAlias) {
+  const response = await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(flowAlias)}/executions`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+async function addExecutionToFlow(token, flowAlias, providerId) {
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(flowAlias)}/executions/execution`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: {
+        provider: providerId,
+      },
+    }
+  );
+}
+
+async function updateExecutionRequirement(token, flowAlias, execution, requirement) {
+  const currentRequirement = normalizeExecutionValue(execution.requirement).toUpperCase();
+  if (currentRequirement === requirement) {
+    return;
+  }
+
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/flows/${encodeURIComponent(flowAlias)}/executions`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: {
+        ...execution,
+        requirement,
+      },
+    }
+  );
+}
+
+async function deleteExecution(token, executionId) {
+  await makeRequest(
+    `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/authentication/executions/${encodeURIComponent(executionId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+}
+
+async function reconcileBrowserPasskeyFlowExecutions(token, flowAlias) {
+  log(`\n🧭 Reconciling executions in '${flowAlias}' for mode '${KEYCLOAK_LOGIN_MODE}'...`, 'yellow');
+
+  let executions = await getFlowExecutions(token, flowAlias);
+
+  const usernameFormExecutions = findExecutions(executions, [
+    USERNAME_PASSWORD_FORM_LABEL,
+    'auth-username-password-form',
+    'username-password-form',
+  ]);
+
+  const desiredUsernamePasswordRequirement = getDesiredUsernamePasswordRequirement();
+
+  const otpExecutions = findExecutions(executions, [
+    CONDITIONAL_OTP_FLOW_LABEL,
+    CONDITIONAL_USER_CONFIGURED_PROVIDER_ID,
+    OTP_FORM_PROVIDER_ID,
+    'OTP Form',
+  ]);
+
+  for (const execution of otpExecutions) {
+    await deleteExecution(token, execution.id);
+  }
+
+  if (otpExecutions.length > 0) {
+    log(`✓ Removed ${otpExecutions.length} OTP-related execution(s) from '${flowAlias}'`, 'green');
+    executions = await getFlowExecutions(token, flowAlias);
+  }
+
+  if (desiredUsernamePasswordRequirement === 'ABSENT') {
+    for (const execution of usernameFormExecutions) {
+      await deleteExecution(token, execution.id);
+    }
+
+    if (usernameFormExecutions.length > 0) {
+      log(`✓ Removed ${usernameFormExecutions.length} username/password execution(s)`, 'green');
+      executions = await getFlowExecutions(token, flowAlias);
+    } else {
+      log('✓ Username/password form execution is already absent', 'green');
+    }
+  } else {
+    let usernameExecution = usernameFormExecutions[0] || null;
+    if (!usernameExecution) {
+      await addExecutionToFlow(token, flowAlias, USERNAME_PASSWORD_PROVIDER_ID);
+      executions = await getFlowExecutions(token, flowAlias);
+      usernameExecution = findFirstExecution(executions, [
+        USERNAME_PASSWORD_FORM_LABEL,
+        USERNAME_PASSWORD_PROVIDER_ID,
+      ]);
+    }
+
+    if (!usernameExecution) {
+      throw new Error(`Could not configure '${USERNAME_PASSWORD_FORM_LABEL}' in flow '${flowAlias}'`);
+    }
+
+    await updateExecutionRequirement(
+      token,
+      flowAlias,
+      usernameExecution,
+      desiredUsernamePasswordRequirement
+    );
+    log(
+      `✓ '${USERNAME_PASSWORD_FORM_LABEL}' is set to ${desiredUsernamePasswordRequirement}`,
+      'green'
+    );
+  }
+
+  let passwordlessExecution = findFirstExecution(executions, [
+    WEBAUTHN_PASSWORDLESS_LABEL,
+    WEBAUTHN_PASSWORDLESS_PROVIDER_ID,
+  ]);
+
+  if (!passwordlessExecution) {
+    await addExecutionToFlow(token, flowAlias, WEBAUTHN_PASSWORDLESS_PROVIDER_ID);
+    executions = await getFlowExecutions(token, flowAlias);
+    passwordlessExecution = findFirstExecution(executions, [
+      WEBAUTHN_PASSWORDLESS_LABEL,
+      WEBAUTHN_PASSWORDLESS_PROVIDER_ID,
+    ]);
+  }
+
+  if (!passwordlessExecution) {
+    throw new Error(
+      `Could not locate '${WEBAUTHN_PASSWORDLESS_LABEL}' execution in flow '${flowAlias}' after attempting to add it`
+    );
+  }
+
+  const desiredPasswordlessRequirement = getDesiredPasswordlessRequirement();
+  await updateExecutionRequirement(token, flowAlias, passwordlessExecution, desiredPasswordlessRequirement);
+  log(`✓ '${WEBAUTHN_PASSWORDLESS_LABEL}' is set to ${desiredPasswordlessRequirement}`, 'green');
+
+  executions = await getFlowExecutions(token, flowAlias);
+
+  const cookieExecution = findFirstExecution(executions, [
+    COOKIE_AUTHENTICATOR_LABEL,
+    'auth-cookie',
+  ]);
+  if (!cookieExecution) {
+    throw new Error(`'${COOKIE_AUTHENTICATOR_LABEL}' execution was not found in flow '${flowAlias}'`);
+  }
+  await updateExecutionRequirement(token, flowAlias, cookieExecution, REQUIREMENT_ALTERNATIVE);
+  log(`✓ '${COOKIE_AUTHENTICATOR_LABEL}' is set to ${REQUIREMENT_ALTERNATIVE}`, 'green');
+
+  const idpExecution = findFirstExecution(executions, [
+    IDP_REDIRECTOR_LABEL,
+    'identity-provider-redirector',
+    'idp-redirector',
+  ]);
+  if (!idpExecution) {
+    throw new Error(`'${IDP_REDIRECTOR_LABEL}' execution was not found in flow '${flowAlias}'`);
+  }
+  await updateExecutionRequirement(token, flowAlias, idpExecution, REQUIREMENT_ALTERNATIVE);
+  log(`✓ '${IDP_REDIRECTOR_LABEL}' is kept optional (${REQUIREMENT_ALTERNATIVE})`, 'green');
+}
+
+async function verifyBrowserPasskeyFlowExecutions(token, flowAlias) {
+  log(`\n✅ Verifying '${flowAlias}' executions for mode '${KEYCLOAK_LOGIN_MODE}'...`, 'yellow');
+
+  const executions = await getFlowExecutions(token, flowAlias);
+
+  const otpExecutions = findExecutions(executions, [
+    CONDITIONAL_OTP_FLOW_LABEL,
+    CONDITIONAL_USER_CONFIGURED_PROVIDER_ID,
+    OTP_FORM_PROVIDER_ID,
+    'OTP Form',
+  ]);
+  if (otpExecutions.length > 0) {
+    throw new Error(
+      `Verification failed: OTP-related executions are still present in '${flowAlias}' (${otpExecutions.length} found)`
+    );
+  }
+
+  const usernameFormExecutions = findExecutions(executions, [
+    USERNAME_PASSWORD_FORM_LABEL,
+    'auth-username-password-form',
+    'username-password-form',
+  ]);
+  const desiredUsernamePasswordRequirement = getDesiredUsernamePasswordRequirement();
+  if (desiredUsernamePasswordRequirement === 'ABSENT') {
+    if (usernameFormExecutions.length > 0) {
+      throw new Error(`Verification failed: '${USERNAME_PASSWORD_FORM_LABEL}' execution is still present`);
+    }
+  } else {
+    if (usernameFormExecutions.length === 0) {
+      throw new Error(`Verification failed: '${USERNAME_PASSWORD_FORM_LABEL}' execution is missing`);
+    }
+
+    const usernameExecution = usernameFormExecutions[0];
+    if (
+      normalizeExecutionValue(usernameExecution.requirement).toUpperCase() !==
+      desiredUsernamePasswordRequirement
+    ) {
+      throw new Error(
+        `Verification failed: '${USERNAME_PASSWORD_FORM_LABEL}' must be ${desiredUsernamePasswordRequirement}, got '${usernameExecution.requirement}'`
+      );
+    }
+  }
+
+  const passwordlessExecution = findFirstExecution(executions, [
+    WEBAUTHN_PASSWORDLESS_LABEL,
+    WEBAUTHN_PASSWORDLESS_PROVIDER_ID,
+  ]);
+  if (!passwordlessExecution) {
+    throw new Error(`Verification failed: '${WEBAUTHN_PASSWORDLESS_LABEL}' execution is missing`);
+  }
+  const desiredPasswordlessRequirement = getDesiredPasswordlessRequirement();
+  if (normalizeExecutionValue(passwordlessExecution.requirement).toUpperCase() !== desiredPasswordlessRequirement) {
+    throw new Error(
+      `Verification failed: '${WEBAUTHN_PASSWORDLESS_LABEL}' must be ${desiredPasswordlessRequirement}, got '${passwordlessExecution.requirement}'`
+    );
+  }
+
+  const cookieExecution = findFirstExecution(executions, [
+    COOKIE_AUTHENTICATOR_LABEL,
+    'auth-cookie',
+  ]);
+  if (!cookieExecution) {
+    throw new Error(`Verification failed: '${COOKIE_AUTHENTICATOR_LABEL}' execution is missing`);
+  }
+  if (normalizeExecutionValue(cookieExecution.requirement).toUpperCase() !== REQUIREMENT_ALTERNATIVE) {
+    throw new Error(
+      `Verification failed: '${COOKIE_AUTHENTICATOR_LABEL}' must be ${REQUIREMENT_ALTERNATIVE}, got '${cookieExecution.requirement}'`
+    );
+  }
+
+  const idpExecution = findFirstExecution(executions, [
+    IDP_REDIRECTOR_LABEL,
+    'identity-provider-redirector',
+    'idp-redirector',
+  ]);
+  if (!idpExecution) {
+    throw new Error(`Verification failed: '${IDP_REDIRECTOR_LABEL}' execution is missing`);
+  }
+  if (normalizeExecutionValue(idpExecution.requirement).toUpperCase() !== REQUIREMENT_ALTERNATIVE) {
+    throw new Error(
+      `Verification failed: '${IDP_REDIRECTOR_LABEL}' must be ${REQUIREMENT_ALTERNATIVE}, got '${idpExecution.requirement}'`
+    );
+  }
+
+  if (desiredUsernamePasswordRequirement === 'ABSENT') {
+    log(`✓ '${USERNAME_PASSWORD_FORM_LABEL}' is not present`, 'green');
+  } else {
+    log(`✓ '${USERNAME_PASSWORD_FORM_LABEL}' is ${desiredUsernamePasswordRequirement}`, 'green');
+  }
+  log(`✓ '${WEBAUTHN_PASSWORDLESS_LABEL}' is ${desiredPasswordlessRequirement}`, 'green');
+  log(`✓ '${COOKIE_AUTHENTICATOR_LABEL}' is optional`, 'green');
+  log(`✓ '${IDP_REDIRECTOR_LABEL}' is optional`, 'green');
+  log('✓ OTP-related executions are not present', 'green');
 }
 
 function toOriginList(value) {
@@ -646,31 +1126,43 @@ async function main() {
     // Step 3: Create realm
     await createRealm(token);
 
-    // Step 4: Ensure custom browser authentication flow exists
+    // Step 4: Enforce realm settings for selected login mode
+    await updateRealmSettings(token);
+
+    // Step 5: Ensure custom browser authentication flow exists
     await copyBrowserFlowIfMissing(token, SOURCE_BROWSER_FLOW_ALIAS, TARGET_BROWSER_FLOW_ALIAS);
 
-    // Step 5: Verify custom browser flow exists
+    // Step 6: Verify custom browser flow exists
     await verifyFlowExists(token, TARGET_BROWSER_FLOW_ALIAS);
 
-    // Step 6: Set realm browser flow to the custom flow
+    // Step 7: Set realm browser flow to the custom flow
     await setRealmBrowserFlow(token, TARGET_BROWSER_FLOW_ALIAS);
 
-    // Step 7: Verify realm browser flow
+    // Step 8: Verify realm browser flow
     await verifyRealmBrowserFlow(token, TARGET_BROWSER_FLOW_ALIAS);
 
-    // Step 8: Ensure passwordless required action availability
+    // Step 9: Reconcile browser-passkey executions for selected mode
+    await reconcileBrowserPasskeyFlowExecutions(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 10: Verify browser-passkey executions
+    await verifyBrowserPasskeyFlowExecutions(token, TARGET_BROWSER_FLOW_ALIAS);
+
+    // Step 11: Ensure passwordless required action availability
     await ensurePasswordlessRequiredAction(token);
 
-    // Step 9: Configure WebAuthn Passwordless realm policy
+    // Step 12: Configure optional social identity providers
+    await ensureSocialIdentityProviders(token);
+
+    // Step 13: Configure WebAuthn Passwordless realm policy
     await configureWebAuthnPasswordlessPolicy(token);
 
-    // Step 10: Verify WebAuthn Passwordless policy
+    // Step 14: Verify WebAuthn Passwordless policy
     await verifyWebAuthnPasswordlessPolicy(token);
 
-    // Step 11: Create client
+    // Step 15: Create client
     const clientSecret = await createClient(token);
 
-    // Step 12: Create test users
+    // Step 16: Create test users
     log('\n👥 Creating test users...', 'yellow');
     
     const users = [
@@ -715,8 +1207,21 @@ async function main() {
 
     log('\n📝 Summary:', 'yellow');
     log(`✓ Realm: ${REALM_NAME}`, 'green');
+    log(`✓ Login Mode: ${KEYCLOAK_LOGIN_MODE}`, 'green');
     log(`✓ Browser Flow: ${TARGET_BROWSER_FLOW_ALIAS}`, 'green');
-    log('✓ Required Action: WebAuthn Register Passwordless (enabled, not default)', 'green');
+    if (isPasskeyOnlyMode()) {
+      log(`✓ Removed: ${USERNAME_PASSWORD_FORM_LABEL}`, 'green');
+    } else {
+      log(`✓ Kept: ${USERNAME_PASSWORD_FORM_LABEL} (${REQUIREMENT_ALTERNATIVE})`, 'green');
+    }
+    log(`✓ Added: ${WEBAUTHN_PASSWORDLESS_LABEL} (${getDesiredPasswordlessRequirement()})`, 'green');
+    log(`✓ Kept: ${COOKIE_AUTHENTICATOR_LABEL} (${REQUIREMENT_ALTERNATIVE})`, 'green');
+    log(`✓ Kept: ${IDP_REDIRECTOR_LABEL} (${REQUIREMENT_ALTERNATIVE})`, 'green');
+    log(
+      `✓ Required Action: WebAuthn Register Passwordless (enabled, default=${!isPasskeyOnlyMode()})`,
+      'green'
+    );
+    log('✓ Optional social IdPs: Google/Apple (configured when env vars are provided)', 'green');
     log(`✓ WebAuthn Passwordless RP ID: ${WEBAUTHN_PASSWORDLESS_RP_ID}`, 'green');
     log(`✓ WebAuthn Passwordless RP Name: ${WEBAUTHN_PASSWORDLESS_RP_NAME}`, 'green');
     log(`✓ WebAuthn Passwordless Origin: ${WEBAUTHN_PASSWORDLESS_ORIGIN}`, 'green');

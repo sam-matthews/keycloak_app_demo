@@ -1,0 +1,50 @@
+http:
+  routers:
+    app-router:
+      rule: Host(`app.sammatthews.nz`)
+      entryPoints:
+        - websecure
+      service: app-service
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers@file
+        - compress-response@file
+
+    api-router:
+      rule: Host(`api.sammatthews.nz`)
+      entryPoints:
+        - websecure
+      service: api-service
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers@file
+        - compress-response@file
+
+    auth-router:
+      rule: Host(`auth.sammatthews.nz`)
+      entryPoints:
+        - websecure
+      service: auth-service
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - security-headers@file
+        - compress-response@file
+
+  services:
+    app-service:
+      loadBalancer:
+        servers:
+          - url: http://frontend:3000
+
+    api-service:
+      loadBalancer:
+        servers:
+          - url: http://backend:3001
+
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: http://keycloak:8080

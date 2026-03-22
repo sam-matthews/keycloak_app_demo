@@ -1,4 +1,37 @@
 services:
+  # Reverse Proxy (TLS termination and host-based routing)
+  reverse-proxy:
+    image: traefik:v3.0.4
+    container_name: reverse-proxy
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+      - --entryPoints.web.http.redirections.entryPoint.to=websecure
+      - --entryPoints.web.http.redirections.entryPoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@sammatthews.nz}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --ping=true
+      - --ping.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./reverse-proxy/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./reverse-proxy/dynamic:/etc/traefik/dynamic:ro
+      - letsencrypt_data:/letsencrypt
+    depends_on:
+      - frontend
+      - backend
+      - keycloak
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Keycloak Database (PostgreSQL)
   keycloak-db:
     image: postgres:15
@@ -48,11 +81,12 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak123
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-auth.sammatthews.nz}
+      KC_HOSTNAME_STRICT: ${KEYCLOAK_HOSTNAME_STRICT:-true}
+      KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: 'true'
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -73,14 +107,17 @@ services:
       DB_USER: appuser
       DB_PASSWORD: apppass123
       KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER_URLS: ${KEYCLOAK_ISSUER_URLS:-https://auth.sammatthews.nz/realms/demo-realm,http://localhost:8080/realms/demo-realm,http://keycloak:8080/realms/demo-realm}
+      KEYCLOAK_ACCEPTED_CLIENT_IDS: ${KEYCLOAK_ACCEPTED_CLIENT_IDS:-web-app}
       KEYCLOAK_REALM: demo-realm
       KEYCLOAK_CLIENT_ID: web-app
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-https://app.sammatthews.nz,http://localhost:3000}
       PORT: 3001
     volumes:
       - ./backend:/app
       - /app/node_modules
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     depends_on:
       app-db:
         condition: service_healthy
@@ -96,15 +133,15 @@ services:
       dockerfile: Dockerfile
     container_name: frontend
     environment:
-      REACT_APP_API_URL: http://localhost:3001
-      REACT_APP_KEYCLOAK_URL: http://localhost:8080
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-https://api.sammatthews.nz}
+      REACT_APP_KEYCLOAK_URL: ${REACT_APP_KEYCLOAK_URL:-https://auth.sammatthews.nz}
       REACT_APP_KEYCLOAK_REALM: demo-realm
       REACT_APP_KEYCLOAK_CLIENT_ID: web-app
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - backend
     networks:
@@ -140,4 +177,6 @@ volumes:
   keycloak_db_data:
     driver: local
   app_db_data:
+    driver: local
+  letsencrypt_data:
     driver: local

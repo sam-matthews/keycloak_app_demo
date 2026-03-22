@@ -125,16 +125,40 @@ docker-compose restart backend
 Open your browser and go to: **http://localhost:3000**
 
 1. Click **"Login with Keycloak"**
-2. Login with any test user:
+2. Choose any available sign-in method:
+  - Passkey (security key / Touch ID / device passkey)
+  - Username/password
+  - Social provider (if configured, e.g., Google or Apple)
+3. For username/password, login with any test user:
    - Username: `testuser`
    - Password: `password123`
-3. Start creating notes!
+4. If prompted, register a passkey for future passwordless login
+5. Start creating notes!
+
+### Optional: Configure Social Login (Google/Apple)
+
+Before running `npm run setup-keycloak`, set provider credentials in `.env`:
+
+```bash
+KEYCLOAK_LOGIN_MODE=multi-option
+GOOGLE_IDP_CLIENT_ID=your-google-client-id
+GOOGLE_IDP_CLIENT_SECRET=your-google-client-secret
+APPLE_IDP_CLIENT_ID=your-apple-client-id
+APPLE_IDP_CLIENT_SECRET=your-apple-client-secret
+```
+
+Then re-run setup:
+
+```bash
+npm run setup-keycloak
+```
 
 ## Verify Everything Works
 
 ### Test the Frontend
 - ✅ Login page loads
 - ✅ Keycloak login redirects properly
+- ✅ Multiple login options are available (passkey, password, social if configured)
 - ✅ After login, you see the notes interface
 - ✅ Can create a new note
 - ✅ Can edit a note

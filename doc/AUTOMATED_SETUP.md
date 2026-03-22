@@ -9,9 +9,30 @@ The `setup-keycloak.js` script uses Keycloak's Admin REST API to automatically:
 1. ✅ Wait for Keycloak to be fully ready
 2. ✅ Authenticate with Keycloak admin credentials
 3. ✅ Create the `demo-realm` with security settings
-4. ✅ Create the `web-app` client with OAuth/OIDC configuration
-5. ✅ Generate and display the client secret
-6. ✅ Create test users with passwords (non-temporary)
+4. ✅ Copy the built-in `browser` flow to `browser-passkey` (if missing)
+5. ✅ Set realm Browser Flow to `browser-passkey`
+6. ✅ Reconcile `browser-passkey` executions for the selected login mode:
+  - `KEYCLOAK_LOGIN_MODE=multi-option` (default):
+    - Keep `Username Password Form` (`ALTERNATIVE`)
+    - Keep `WebAuthn Passwordless Authenticator` (`ALTERNATIVE`)
+    - Keep `Cookie` optional (`ALTERNATIVE`)
+    - Keep `Identity Provider Redirector` optional (`ALTERNATIVE`)
+  - `KEYCLOAK_LOGIN_MODE=passkey-only`:
+    - Remove `Username Password Form`
+    - Set `WebAuthn Passwordless Authenticator` to `REQUIRED`
+    - Keep `Cookie` optional (`ALTERNATIVE`)
+    - Keep `Identity Provider Redirector` optional (`ALTERNATIVE`)
+7. ✅ Verify custom flow existence, execution state, and realm Browser Flow assignment
+8. ✅ Enable required action `WebAuthn Register Passwordless`
+   - `multi-option`: enabled and default for onboarding
+   - `passkey-only`: enabled and not default
+9. ✅ Configure realm `WebAuthn Passwordless` for localhost development
+10. ✅ Configure optional social identity providers when credentials are supplied:
+   - Google (`GOOGLE_IDP_CLIENT_ID`, `GOOGLE_IDP_CLIENT_SECRET`)
+   - Apple (`APPLE_IDP_CLIENT_ID`, `APPLE_IDP_CLIENT_SECRET`)
+11. ✅ Create the `web-app` client with OAuth/OIDC configuration
+12. ✅ Generate and display the client secret
+13. ✅ Create test users with passwords (non-temporary)
 
 ## Quick Usage
 
@@ -35,6 +56,8 @@ docker-compose up -d
 docker-compose run --rm keycloak-setup
 ```
 
+If the script prints a URL with `http://keycloak:8080`, that hostname is only reachable from inside Docker. Use `http://localhost:8080` in your browser.
+
 ### Method 3: Direct Execution
 
 ```bash
@@ -56,6 +79,16 @@ The script uses these environment variables (with defaults):
 | `KEYCLOAK_ADMIN_PASSWORD` | `admin123` | Admin password |
 | `KEYCLOAK_REALM` | `demo-realm` | Realm name to create |
 | `KEYCLOAK_CLIENT_ID` | `web-app` | Client ID to create |
+| `KEYCLOAK_LOGIN_MODE` | `multi-option` | Login experience (`multi-option` or `passkey-only`) |
+| `GOOGLE_IDP_CLIENT_ID` | (empty) | Optional Google identity provider client ID |
+| `GOOGLE_IDP_CLIENT_SECRET` | (empty) | Optional Google identity provider client secret |
+| `APPLE_IDP_CLIENT_ID` | (empty) | Optional Apple identity provider client ID |
+| `APPLE_IDP_CLIENT_SECRET` | (empty) | Optional Apple identity provider client secret |
+| `WEBAUTHN_PASSWORDLESS_RP_ID` | `localhost` | WebAuthn Passwordless RP ID |
+| `WEBAUTHN_PASSWORDLESS_RP_NAME` | `Mac App Dev` | WebAuthn Passwordless RP name |
+| `WEBAUTHN_PASSWORDLESS_ORIGIN` | `http://localhost:8080` | WebAuthn Passwordless allowed origin |
+| `WEBAUTHN_PASSWORDLESS_USER_VERIFICATION` | `preferred` | WebAuthn Passwordless user verification requirement |
+| `WEBAUTHN_PASSWORDLESS_ATTESTATION` | `none` | WebAuthn Passwordless attestation conveyance |
 
 ### Custom Configuration Example
 
@@ -71,11 +104,48 @@ npm run setup-keycloak
 ### Realm: `demo-realm`
 
 - **Display Name**: Demo Realm
-- **Registration**: Disabled (users created manually)
+- **Registration**:
+  - `multi-option`: enabled (new users can sign up)
+  - `passkey-only`: disabled by default
 - **Login with Email**: Enabled
 - **Reset Password**: Enabled
 - **Brute Force Protection**: Enabled
 - **SSL Requirement**: None (development mode)
+
+### Authentication Flow
+
+- **Source Flow**: `browser`
+- **Custom Flow**: `browser-passkey`
+- **Realm Browser Flow**: `browser-passkey`
+- **Modes**:
+  - `multi-option`: passkey + username/password + optional social IdPs
+  - `passkey-only`: passkey-only with no username/password form
+- **Kept Optional**: `Cookie`, `Identity Provider Redirector`
+- **Idempotent Behavior**: If `browser-passkey` already exists, script keeps it and continues
+
+### Required Action: WebAuthn Register Passwordless
+
+- **Availability**: Enabled at realm level
+- **Default Action**:
+  - `multi-option`: enabled (new users are prompted to register passkey)
+  - `passkey-only`: disabled (already required for login)
+
+### Optional Identity Providers
+
+When credentials are supplied via environment variables, setup can provision:
+
+- **Google** (`google` provider)
+- **Apple** (`apple` provider)
+
+If credentials are not provided, setup skips social IdP creation and logs an info message.
+
+### Realm WebAuthn Passwordless (localhost defaults)
+
+- **Relying Party ID**: `localhost`
+- **Relying Party Name**: `Mac App Dev`
+- **Origin**: `http://localhost:8080`
+- **User Verification**: `preferred`
+- **Attestation Conveyance**: `none`
 
 ### Client: `web-app`
 
@@ -116,6 +186,13 @@ Update your docker-compose.yml backend environment:
 KEYCLOAK_CLIENT_SECRET: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
+The script also prints verification logs confirming:
+
+- `browser-passkey` appears in Authentication Flows
+- Realm Browser Flow is set to `browser-passkey`
+- Login-mode-specific execution requirements are enforced in `browser-passkey`
+- `Cookie` and `Identity Provider Redirector` remain optional
+
 ### 2. Update Backend Configuration
 
 Edit `docker-compose.yml` and replace the placeholder:
@@ -139,6 +216,19 @@ docker-compose restart backend
 - **Backend API**: <http://localhost:3001>
 
 Login with any of the test user credentials!
+
+In `multi-option` mode, users can sign in with available methods and are prompted to register a passkey for future passwordless sign-in.
+
+## Passwordless Acceptance Checks
+
+After setup completes:
+
+1. Open Keycloak Admin Console → Authentication → Flows → `browser-passkey`
+2. Confirm these execution states based on `KEYCLOAK_LOGIN_MODE`:
+  - `multi-option`: both `Username Password Form` and `WebAuthn Passwordless Authenticator` are `ALTERNATIVE`
+  - `passkey-only`: `Username Password Form` is absent and `WebAuthn Passwordless Authenticator` is `REQUIRED`
+  - In both modes: `Cookie` and `Identity Provider Redirector` are `ALTERNATIVE`
+3. Open the app login flow and verify the expected sign-in options are shown
 
 ## Troubleshooting
 

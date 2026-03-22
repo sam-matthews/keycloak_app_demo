@@ -36,8 +36,6 @@ This application follows microservices best practices with containerized service
 
 The fastest way to get started is using the automated setup script:
 
-Environment defaults (including WebAuthn Passwordless overrides) are documented in `.env.example` at the repository root.
-
 ```bash
 # 1. Clone and navigate to the repository
 git clone <repository-url>
@@ -53,8 +51,6 @@ npm run setup-keycloak
 The script will automatically:
 - ✅ Wait for Keycloak to be ready
 - ✅ Create the `demo-realm`
-- ✅ Enable required action `WebAuthn Register Passwordless` (enabled, not default)
-- ✅ Configure realm `WebAuthn Passwordless` for localhost (`localhost`, `Mac App Dev`, `http://localhost:8080`)
 - ✅ Create the `web-app` client
 - ✅ Generate and display the client secret
 - ✅ Create 3 test users with passwords
@@ -74,8 +70,6 @@ After the script completes:
 ```bash
 docker-compose run --rm keycloak-setup
 ```
-
-If you run setup via Docker Compose, any printed admin console URL using `http://keycloak:8080` is only valid inside the Docker network. Use `http://localhost:8080` in your browser.
 
 ### Option 2: Manual Setup
 
@@ -101,7 +95,6 @@ npm run logs:keycloak       # View Keycloak logs only
 - [Quick Start Guide](doc/QUICKSTART.md) - Get running in 5 minutes
 - [Automated Setup Guide](doc/AUTOMATED_SETUP.md) - Complete guide for automated Keycloak setup
 - [Manual Setup Guide](doc/KEYCLOAK_SETUP.md) - Step-by-step manual configuration
-- [Passkey Realm Setup](doc/PASSKEY_REALM_SETUP.md) - Create development realm for passkey testing
 - [Project Guidelines](.github/copilot-instructions.md) - Development best practices
 
 ## Development
@@ -253,6 +246,77 @@ Verify:
 3. Token hasn't expired (Keycloak tokens expire after 5 minutes by default)
 
 ## Production Deployment
+
+### VM + DNS + TLS (Subdomain Routing)
+
+This repository now includes a reverse proxy service for VM deployments:
+
+- `app.sammatthews.nz` -> frontend
+- `api.sammatthews.nz` -> backend
+- `auth.sammatthews.nz` -> Keycloak
+
+Traefik handles host-based routing and automatically provisions Let's Encrypt certificates.
+
+1. Create DNS `A` records for `app`, `api`, and `auth` subdomains to your VM public IP.
+2. Copy `.env.example` to `.env` and set at minimum:
+  - `ACME_EMAIL`
+  - `KEYCLOAK_HOSTNAME`
+  - `REACT_APP_API_URL`
+  - `REACT_APP_KEYCLOAK_URL`
+  - `APP_CORS_ORIGINS`
+3. Start services:
+
+```bash
+docker-compose up -d
+```
+
+4. Validate endpoints:
+  - `https://app.sammatthews.nz`
+  - `https://api.sammatthews.nz/api/health`
+  - `https://auth.sammatthews.nz`
+
+Notes:
+- App containers still publish localhost-only ports for local diagnostics.
+- Public internet traffic should go through the reverse proxy on ports 80/443.
+
+### Keycloak Realm Strategy for Multiple Apps
+
+Use one realm for shared SSO users, and create one OIDC client per application.
+
+- Recommended: single realm + multiple clients (`web-app`, `admin-app`, etc.)
+- Use client scopes and roles for app-level authorization boundaries
+- Use separate realms only for strict isolation (different user directories/policies) or non-production experiments
+
+### CI/CD Deployment To VM
+
+This repository includes a deploy workflow at `.github/workflows/deploy-vm.yml`.
+It triggers automatically on pushes to `main` and can also be run manually.
+
+#### Required GitHub Actions Secrets
+
+- `VM_HOST`: VM hostname or IP
+- `VM_USER`: deploy user (recommended non-root user, e.g. `deploy`)
+- `VM_SSH_KEY`: private SSH key for `VM_USER`
+- `VM_PORT`: SSH port (usually `22`)
+- `VM_APP_DIR`: deployment directory on VM (example: `/home/deploy/keycloak_app_demo`)
+
+#### VM First-Run Bootstrap
+
+```bash
+mkdir -p /home/deploy/keycloak_app_demo
+chown -R deploy:deploy /home/deploy/keycloak_app_demo
+```
+
+Ensure a production `.env` exists on the VM in `VM_APP_DIR` before the first workflow run.
+If `.env` is missing, the deploy script will bootstrap from `.env.prod` when available.
+
+#### What The Workflow Does
+
+1. Copies repository files to the VM over SSH
+2. Runs `scripts/deploy-vm.sh` remotely
+3. Executes `docker compose up -d --build`
+4. Runs idempotent `keycloak-setup`
+5. Verifies public health endpoints (`app`, `api`, `auth`)
 
 ### Security Checklist
 

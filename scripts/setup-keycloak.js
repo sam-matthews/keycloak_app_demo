@@ -47,6 +47,15 @@ const WEBAUTHN_PASSWORDLESS_USER_VERIFICATION =
   process.env.WEBAUTHN_PASSWORDLESS_USER_VERIFICATION || 'preferred';
 const WEBAUTHN_PASSWORDLESS_ATTESTATION =
   process.env.WEBAUTHN_PASSWORDLESS_ATTESTATION || 'none';
+const KEYCLOAK_PUBLIC_URL = process.env.KEYCLOAK_PUBLIC_URL || 'http://localhost:8080';
+const KEYCLOAK_SSL_REQUIRED = process.env.KEYCLOAK_SSL_REQUIRED || 'none';
+const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+const MACOS_REDIRECT_URI = process.env.MACOS_REDIRECT_URI || 'myapp://auth/callback';
+
+function withWildcard(pathBase) {
+  return `${pathBase}/*`;
+}
 
 // Color codes for terminal output
 const colors = {
@@ -220,7 +229,7 @@ async function createRealm(token) {
     resetPasswordAllowed: true,
     editUsernameAllowed: false,
     bruteForceProtected: true,
-    sslRequired: 'none', // For development; use 'external' or 'all' in production
+    sslRequired: KEYCLOAK_SSL_REQUIRED,
   };
 
   try {
@@ -255,7 +264,7 @@ async function updateRealmSettings(token) {
     resetPasswordAllowed: true,
     editUsernameAllowed: false,
     bruteForceProtected: true,
-    sslRequired: 'none',
+    sslRequired: KEYCLOAK_SSL_REQUIRED,
   };
 
   await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {
@@ -395,13 +404,13 @@ async function createClient(token) {
       serviceAccountsEnabled: false,
       authorizationServicesEnabled: false,
       redirectUris: [
-        'myapp://auth/callback',
-        'http://localhost/*',
+        MACOS_REDIRECT_URI,
+        withWildcard(APP_BASE_URL),
       ],
       webOrigins: [],
       attributes: {
         'pkce.code.challenge.method': 'S256',
-        'post.logout.redirect.uris': 'myapp://auth/callback http://localhost/*',
+        'post.logout.redirect.uris': `${MACOS_REDIRECT_URI} ${withWildcard(APP_BASE_URL)}`,
       },
     };
   } else {
@@ -417,11 +426,11 @@ async function createClient(token) {
       directAccessGrantsEnabled: true,
       serviceAccountsEnabled: false,
       authorizationServicesEnabled: false,
-      redirectUris: ['http://localhost:3000/*'],
-      webOrigins: ['http://localhost:3000'],
+      redirectUris: [withWildcard(APP_BASE_URL)],
+      webOrigins: [APP_BASE_URL],
       attributes: {
         'pkce.code.challenge.method': 'S256',
-        'post.logout.redirect.uris': 'http://localhost:3000/*',
+        'post.logout.redirect.uris': withWildcard(APP_BASE_URL),
       },
     };
   }
@@ -529,7 +538,7 @@ async function ensurePasswordlessRequiredAction(token) {
 }
 
 async function configureWebAuthnPasswordlessPolicy(token) {
-  log('\n🔑 Configuring WebAuthn Passwordless policy for localhost...', 'yellow');
+  log('\n🔑 Configuring WebAuthn Passwordless policy...', 'yellow');
 
   const policyUpdate = {
     webAuthnPolicyPasswordlessRpId: WEBAUTHN_PASSWORDLESS_RP_ID,
@@ -1248,13 +1257,13 @@ async function main() {
     }
 
     log('\n🎉 You can now access the application:', 'green');
-    log('   Frontend: http://localhost:3000', 'cyan');
-    log('   Keycloak: http://localhost:8080', 'cyan');
+    log(`   Frontend: ${APP_BASE_URL}`, 'cyan');
+    log(`   Keycloak: ${KEYCLOAK_PUBLIC_URL}`, 'cyan');
     const hostKeycloakBaseUrl = getHostKeycloakBaseUrl();
     if (hostKeycloakBaseUrl) {
       log(`   Keycloak (host): ${hostKeycloakBaseUrl}`, 'yellow');
     }
-    log('   Backend API: http://localhost:3001', 'cyan');
+    log(`   Backend API: ${API_BASE_URL}`, 'cyan');
 
     log('\n🔗 Admin Console:', 'yellow');
     log(`   ${KEYCLOAK_URL}/admin/master/console/#/${REALM_NAME}`, 'cyan');

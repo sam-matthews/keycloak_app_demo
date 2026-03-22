@@ -9,11 +9,33 @@ const notesRouter = require('./src/routes/notes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const allowedOrigins = (process.env.APP_CORS_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser clients and same-host health checks.
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Origin not allowed by CORS'));
+  },
+  credentials: true,
+}));
 app.use(morgan('combined'));
 app.use(express.json());
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', service: 'backend', timestamp: new Date().toISOString() });
+});
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
@@ -41,7 +63,7 @@ async function startServer() {
     
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/api/health`);
+      console.log(`Health check: http://localhost:${PORT}/health`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

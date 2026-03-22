@@ -3,6 +3,14 @@ const jwksClient = require('jwks-rsa');
 
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'demo-realm';
+const ISSUER_URLS_FROM_ENV = (process.env.KEYCLOAK_ISSUER_URLS || '')
+  .split(',')
+  .map((issuer) => issuer.trim())
+  .filter(Boolean);
+const ACCEPTED_CLIENT_IDS = (process.env.KEYCLOAK_ACCEPTED_CLIENT_IDS || process.env.KEYCLOAK_CLIENT_ID || 'web-app')
+  .split(',')
+  .map((clientId) => clientId.trim())
+  .filter(Boolean);
 
 const client = jwksClient({
   jwksUri: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`
@@ -33,20 +41,27 @@ const verifyToken = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid token format' });
   }
 
-  // The token issuer will be http://localhost:8080/realms/demo-realm from browser
-  // but backend uses http://keycloak:8080 internally
-  // Accept both localhost and keycloak as valid issuers
+  // Accept both internal and external issuer URLs to support reverse-proxy deployments.
   const tokenIssuer = decoded.payload.iss;
-  const validIssuers = [
-    `http://localhost:8080/realms/${KEYCLOAK_REALM}`,
-    `http://keycloak:8080/realms/${KEYCLOAK_REALM}`,
-    `https://localhost:8080/realms/${KEYCLOAK_REALM}`,
-  ];
+  const validIssuers = ISSUER_URLS_FROM_ENV.length > 0
+    ? ISSUER_URLS_FROM_ENV
+    : [
+      `http://localhost:8080/realms/${KEYCLOAK_REALM}`,
+      `http://keycloak:8080/realms/${KEYCLOAK_REALM}`,
+      `https://localhost:8080/realms/${KEYCLOAK_REALM}`,
+    ];
 
   if (!validIssuers.includes(tokenIssuer)) {
     console.error('Invalid issuer:', tokenIssuer);
     console.error('Expected one of:', validIssuers.join(', '));
     return res.status(401).json({ error: 'Invalid token issuer' });
+  }
+
+  const tokenClientId = decoded.payload.azp || decoded.payload.clientId;
+  if (tokenClientId && !ACCEPTED_CLIENT_IDS.includes(tokenClientId)) {
+    console.error('Invalid client id:', tokenClientId);
+    console.error('Expected one of:', ACCEPTED_CLIENT_IDS.join(', '));
+    return res.status(401).json({ error: 'Invalid token client id' });
   }
 
   // Now verify with the actual issuer from the token

@@ -1,0 +1,52 @@
+name: Deploy To VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: vm-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy repository to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_PORT }}
+          source: "."
+          target: ${{ secrets.VM_APP_DIR }}
+          overwrite: true
+          rm: false
+          strip_components: 0
+          exclude: ".git,.github/workflows,node_modules,backend/node_modules,frontend/node_modules,.env,.env.local,.env.prod,.DS_Store"
+
+      - name: Deploy services on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_PORT }}
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.VM_APP_DIR }}"
+            ./scripts/deploy-vm.sh "${{ secrets.VM_APP_DIR }}"
+
+      - name: Verify public endpoints
+        run: |
+          set -euo pipefail
+          curl -fsS https://api.sammatthews.nz/api/health
+          curl -fsS -I https://app.sammatthews.nz
+          curl -fsS -I https://auth.sammatthews.nz

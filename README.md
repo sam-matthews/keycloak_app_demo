@@ -2,6 +2,8 @@
 
 A full-stack note-taking application demonstrating Keycloak authentication integration with a React frontend and Node.js backend, using PostgreSQL for data persistence.
 
+Just another line.
+
 ## Architecture
 
 This application follows microservices best practices with containerized services:

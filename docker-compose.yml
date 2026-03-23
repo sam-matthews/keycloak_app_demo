@@ -27,7 +27,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/ping"]
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
       timeout: 5s
       retries: 5

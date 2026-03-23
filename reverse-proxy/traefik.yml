@@ -9,10 +9,19 @@ providers:
     directory: /etc/traefik/dynamic
     watch: true
 
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@sammatthews.nz
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
 api:
   dashboard: false
 
-ping: {}
+ping:
+  entryPoint: web
 
 log:
   level: INFO

@@ -31,9 +31,9 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_PORT }}
           source: "deploy.tar.gz"
-          target: "/tmp"
+          target: "/tmp/keycloak-app-deploy"
           overwrite: true
-          rm: true
+          rm: false
           strip_components: 0
 
       - name: Deploy services on VM
@@ -47,8 +47,8 @@ jobs:
             set -euo pipefail
 
             mkdir -p "${{ secrets.VM_APP_DIR }}"
-            tar -xzf /tmp/deploy.tar.gz -C "${{ secrets.VM_APP_DIR }}" --no-same-owner
-            rm -f /tmp/deploy.tar.gz
+            tar -xzf /tmp/keycloak-app-deploy/deploy.tar.gz -C "${{ secrets.VM_APP_DIR }}" --no-same-owner
+            rm -f /tmp/keycloak-app-deploy/deploy.tar.gz
 
             cd "${{ secrets.VM_APP_DIR }}"
             ./scripts/deploy-vm.sh "${{ secrets.VM_APP_DIR }}"

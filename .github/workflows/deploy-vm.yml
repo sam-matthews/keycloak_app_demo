@@ -18,19 +18,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy repository to VM
+      - name: Build deployment archive
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output=deploy.tar.gz HEAD
+
+      - name: Copy deployment archive to VM
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_PORT }}
-          source: "."
-          target: ${{ secrets.VM_APP_DIR }}
+          source: "deploy.tar.gz"
+          target: "/tmp"
           overwrite: true
-          rm: false
+          rm: true
           strip_components: 0
-          exclude: ".git,.github/workflows,node_modules,backend/node_modules,frontend/node_modules,.env,.env.local,.env.prod,.DS_Store"
 
       - name: Deploy services on VM
         uses: appleboy/ssh-action@v1.0.3
@@ -41,12 +45,17 @@ jobs:
           port: ${{ secrets.VM_PORT }}
           script: |
             set -euo pipefail
+
+            mkdir -p "${{ secrets.VM_APP_DIR }}"
+            tar -xzf /tmp/deploy.tar.gz -C "${{ secrets.VM_APP_DIR }}" --no-same-owner
+            rm -f /tmp/deploy.tar.gz
+
             cd "${{ secrets.VM_APP_DIR }}"
             ./scripts/deploy-vm.sh "${{ secrets.VM_APP_DIR }}"
 
       - name: Verify public endpoints
         run: |
           set -euo pipefail
-          curl -fsS https://api.sammatthews.nz/api/health
-          curl -fsS -I https://app.sammatthews.nz
-          curl -fsS -I https://auth.sammatthews.nz
+          curl --retry 12 --retry-delay 5 --retry-all-errors -fsS https://api.sammatthews.nz/api/health
+          curl --retry 12 --retry-delay 5 --retry-all-errors -fsSI https://app.sammatthews.nz
+          curl --retry 12 --retry-delay 5 --retry-all-errors -fsSI https://auth.sammatthews.nz

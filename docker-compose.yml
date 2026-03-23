@@ -160,6 +160,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin123
       KEYCLOAK_REALM: demo-realm
       KEYCLOAK_CLIENT_ID: web-app
+      APP_BASE_URL: ${APP_BASE_URL:-https://app.sammatthews.nz}
     volumes:
       - ./scripts:/app/scripts
     command: node /app/scripts/setup-keycloak.js

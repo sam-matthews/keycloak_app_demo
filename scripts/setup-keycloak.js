@@ -57,6 +57,20 @@ function withWildcard(pathBase) {
   return `${pathBase}/*`;
 }
 
+function uniqueNonEmpty(values) {
+  return Array.from(
+    new Set(
+      (values || [])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function mergeUnique(existingValues, desiredValues) {
+  return uniqueNonEmpty([...(existingValues || []), ...(desiredValues || [])]);
+}
+
 // Color codes for terminal output
 const colors = {
   reset: '\x1b[0m',
@@ -436,7 +450,7 @@ async function createClient(token) {
   }
 
   try {
-    const response = await makeRequest(
+    await makeRequest(
       `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients`,
       {
         method: 'POST',
@@ -453,7 +467,51 @@ async function createClient(token) {
     return null;
   } catch (error) {
     if (error.statusCode === 409) {
-      log(`ℹ Client '${CLIENT_ID}' already exists`, 'cyan');
+      log(`ℹ Client '${CLIENT_ID}' already exists, reconciling settings...`, 'cyan');
+
+      const existingClientsResponse = await makeRequest(
+        `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${encodeURIComponent(CLIENT_ID)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      const existingClients = Array.isArray(existingClientsResponse.data)
+        ? existingClientsResponse.data
+        : [];
+      const existingClient = existingClients[0];
+
+      if (!existingClient || !existingClient.id) {
+        throw new Error(`Client '${CLIENT_ID}' exists but could not be loaded for update`);
+      }
+
+      const mergedClientConfig = {
+        ...existingClient,
+        ...clientConfig,
+        redirectUris: mergeUnique(existingClient.redirectUris, clientConfig.redirectUris),
+        webOrigins: mergeUnique(existingClient.webOrigins, clientConfig.webOrigins),
+        attributes: {
+          ...(existingClient.attributes || {}),
+          ...(clientConfig.attributes || {}),
+        },
+      };
+
+      await makeRequest(
+        `${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${encodeURIComponent(existingClient.id)}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: mergedClientConfig,
+        }
+      );
+
+      log(`✓ Client '${CLIENT_ID}' settings reconciled`, 'green');
       return null;
     }
     log(`✗ Failed to create client: ${error.message}`, 'red');

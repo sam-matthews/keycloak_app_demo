@@ -262,7 +262,7 @@ Traefik handles host-based routing and automatically provisions Let's Encrypt ce
 1. Create DNS `A` records for `app`, `api`, and `auth` subdomains to your VM public IP.
 2. Copy `.env.example` to `.env` and set at minimum:
   - `ACME_EMAIL`
-  - `KEYCLOAK_HOSTNAME`
+  - `KEYCLOAK_HOSTNAME` (use full URL, e.g. `https://auth.sammatthews.nz`)
   - `REACT_APP_API_URL`
   - `REACT_APP_KEYCLOAK_URL`
   - `APP_CORS_ORIGINS`

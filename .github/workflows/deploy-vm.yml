@@ -60,7 +60,7 @@ jobs:
             rm -f /tmp/keycloak-app-deploy/deploy.tar.gz
 
             cd "${{ secrets.VM_APP_DIR }}"
-            ./scripts/deploy-vm.sh "${{ secrets.VM_APP_DIR }}"
+            ./scripts/deploy-vm.sh "$PWD"
 
       - name: Verify public endpoints
         run: |

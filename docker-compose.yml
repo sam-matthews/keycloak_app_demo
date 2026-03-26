@@ -81,7 +81,7 @@ services:
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak123
-      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-https://auth.sammatthews.nz}
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-auth.sammatthews.nz}
       KC_HOSTNAME_STRICT: ${KEYCLOAK_HOSTNAME_STRICT:-true}
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: 'true'

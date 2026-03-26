@@ -263,6 +263,7 @@ Traefik handles host-based routing and automatically provisions Let's Encrypt ce
 2. Copy `.env.example` to `.env` and set at minimum:
   - `ACME_EMAIL`
   - `KEYCLOAK_HOSTNAME` (hostname only, e.g. `auth.sammatthews.nz`)
+  - `KEYCLOAK_PUBLIC_URL` (full URL, e.g. `https://auth.sammatthews.nz`)
   - `REACT_APP_API_URL`
   - `REACT_APP_KEYCLOAK_URL`
   - `APP_CORS_ORIGINS`

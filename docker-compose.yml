@@ -160,6 +160,8 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin123
       KEYCLOAK_REALM: demo-realm
       KEYCLOAK_CLIENT_ID: web-app
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-https://auth.sammatthews.nz}
+      KEYCLOAK_SSL_REQUIRED: ${KEYCLOAK_SSL_REQUIRED:-external}
       APP_BASE_URL: ${APP_BASE_URL:-https://app.sammatthews.nz}
     volumes:
       - ./scripts:/app/scripts

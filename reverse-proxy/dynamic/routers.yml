@@ -30,6 +30,7 @@ http:
       tls:
         certResolver: letsencrypt
       middlewares:
+        - keycloak-forwarded-https@file
         - security-headers@file
         - compress-response@file
 

@@ -1,5 +1,9 @@
 http:
   middlewares:
+    keycloak-forwarded-https:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
     security-headers:
       headers:
         frameDeny: true

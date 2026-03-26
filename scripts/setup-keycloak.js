@@ -53,6 +53,12 @@ const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:3000').repla
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 const MACOS_REDIRECT_URI = process.env.MACOS_REDIRECT_URI || 'myapp://auth/callback';
 
+function normalizePublicUrl(urlValue) {
+  return String(urlValue || '').trim().replace(/\/$/, '');
+}
+
+const KEYCLOAK_PUBLIC_URL_NORMALIZED = normalizePublicUrl(KEYCLOAK_PUBLIC_URL);
+
 function withWildcard(pathBase) {
   return `${pathBase}/*`;
 }
@@ -244,6 +250,9 @@ async function createRealm(token) {
     editUsernameAllowed: false,
     bruteForceProtected: true,
     sslRequired: KEYCLOAK_SSL_REQUIRED,
+    attributes: {
+      frontendUrl: KEYCLOAK_PUBLIC_URL_NORMALIZED,
+    },
   };
 
   try {
@@ -279,6 +288,9 @@ async function updateRealmSettings(token) {
     editUsernameAllowed: false,
     bruteForceProtected: true,
     sslRequired: KEYCLOAK_SSL_REQUIRED,
+    attributes: {
+      frontendUrl: KEYCLOAK_PUBLIC_URL_NORMALIZED,
+    },
   };
 
   await makeRequest(`${KEYCLOAK_URL}/admin/realms/${REALM_NAME}`, {

@@ -63,6 +63,10 @@ function withWildcard(pathBase) {
   return `${pathBase}/*`;
 }
 
+function withTrailingSlash(pathBase) {
+  return `${pathBase}/`;
+}
+
 function uniqueNonEmpty(values) {
   return Array.from(
     new Set(
@@ -431,12 +435,15 @@ async function createClient(token) {
       authorizationServicesEnabled: false,
       redirectUris: [
         MACOS_REDIRECT_URI,
+        APP_BASE_URL,
+        withTrailingSlash(APP_BASE_URL),
+        `${APP_BASE_URL}/silent-check-sso.html`,
         withWildcard(APP_BASE_URL),
       ],
       webOrigins: [],
       attributes: {
         'pkce.code.challenge.method': 'S256',
-        'post.logout.redirect.uris': `${MACOS_REDIRECT_URI} ${withWildcard(APP_BASE_URL)}`,
+        'post.logout.redirect.uris': '+',
       },
     };
   } else {
@@ -452,11 +459,16 @@ async function createClient(token) {
       directAccessGrantsEnabled: true,
       serviceAccountsEnabled: false,
       authorizationServicesEnabled: false,
-      redirectUris: [withWildcard(APP_BASE_URL)],
+      redirectUris: [
+        APP_BASE_URL,
+        withTrailingSlash(APP_BASE_URL),
+        `${APP_BASE_URL}/silent-check-sso.html`,
+        withWildcard(APP_BASE_URL),
+      ],
       webOrigins: [APP_BASE_URL],
       attributes: {
         'pkce.code.challenge.method': 'S256',
-        'post.logout.redirect.uris': withWildcard(APP_BASE_URL),
+        'post.logout.redirect.uris': '+',
       },
     };
   }

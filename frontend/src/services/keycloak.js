@@ -18,6 +18,22 @@ const finishInit = (authenticated, onAuthenticatedCallback) => {
   return authenticated;
 };
 
+const hasAuthCallbackParams = () => {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashValue = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const hashParams = new URLSearchParams(hashValue);
+
+  const hasParam = (name) => searchParams.has(name) || hashParams.has(name);
+
+  return (
+    (hasParam('code') && hasParam('state')) ||
+    hasParam('session_state') ||
+    hasParam('error')
+  );
+};
+
 const initKeycloak = (onAuthenticatedCallback, onErrorCallback) => {
   // React StrictMode can mount twice in development. Reuse in-flight init to avoid races.
   if (initPromise) {
@@ -39,12 +55,19 @@ const initKeycloak = (onAuthenticatedCallback, onErrorCallback) => {
 
   console.log('Starting Keycloak initialization...');
 
-  initPromise = keycloak.init({
-    onLoad: 'check-sso',
-    silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
+  const isAuthCallback = hasAuthCallbackParams();
+  const initOptions = {
     pkceMethod: 'S256',
     checkLoginIframe: false
-  })
+  };
+
+  if (!isAuthCallback) {
+    initOptions.onLoad = 'check-sso';
+    initOptions.silentCheckSsoRedirectUri = window.location.origin + '/silent-check-sso.html';
+    initOptions.silentCheckSsoFallback = false;
+  }
+
+  initPromise = keycloak.init(initOptions)
   .then((authenticated) => {
     isInitialized = true;
     console.log('Keycloak init complete - authenticated:', authenticated);
@@ -75,7 +98,7 @@ const initKeycloak = (onAuthenticatedCallback, onErrorCallback) => {
 const doLogin = () =>
   keycloak.login({ redirectUri: window.location.origin + window.location.pathname });
 
-const doLogout = () => keycloak.logout({ redirectUri: window.location.origin });
+const doLogout = () => keycloak.logout({ redirectUri: window.location.origin + '/' });
 
 const getToken = () => keycloak.token;
 

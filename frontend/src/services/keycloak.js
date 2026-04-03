@@ -6,6 +6,8 @@ const keycloakConfig = {
   clientId: process.env.REACT_APP_KEYCLOAK_CLIENT_ID || 'web-app'
 };
 
+const enableCheckSso = process.env.REACT_APP_KEYCLOAK_CHECK_SSO !== 'false';
+
 const keycloak = new Keycloak(keycloakConfig);
 
 let isInitialized = false;
@@ -34,6 +36,8 @@ const hasAuthCallbackParams = () => {
   );
 };
 
+const isAuthCallback = () => hasAuthCallbackParams();
+
 const initKeycloak = (onAuthenticatedCallback, onErrorCallback) => {
   // React StrictMode can mount twice in development. Reuse in-flight init to avoid races.
   if (initPromise) {
@@ -55,13 +59,13 @@ const initKeycloak = (onAuthenticatedCallback, onErrorCallback) => {
 
   console.log('Starting Keycloak initialization...');
 
-  const isAuthCallback = hasAuthCallbackParams();
+  const isAuthCallbackFlow = hasAuthCallbackParams();
   const initOptions = {
     pkceMethod: 'S256',
     checkLoginIframe: false
   };
 
-  if (!isAuthCallback) {
+  if (!isAuthCallbackFlow && enableCheckSso) {
     initOptions.onLoad = 'check-sso';
     initOptions.silentCheckSsoRedirectUri = window.location.origin + '/silent-check-sso.html';
     initOptions.silentCheckSsoFallback = false;
@@ -123,6 +127,7 @@ const UserService = {
   updateToken,
   getUsername,
   hasRole,
+  isAuthCallback,
   keycloak
 };
 

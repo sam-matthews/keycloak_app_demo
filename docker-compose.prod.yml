@@ -1,0 +1,17 @@
+services:
+  backend:
+    environment:
+      NODE_ENV: production
+    volumes: []
+
+  frontend:
+    build:
+      target: production
+    volumes: []
+    environment:
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-https://api.sammatthews.nz}
+      REACT_APP_KEYCLOAK_URL: ${REACT_APP_KEYCLOAK_URL:-https://auth.sammatthews.nz}
+      REACT_APP_KEYCLOAK_REALM: ${REACT_APP_KEYCLOAK_REALM:-demo-realm}
+      REACT_APP_KEYCLOAK_CLIENT_ID: ${REACT_APP_KEYCLOAK_CLIENT_ID:-web-app}
+      REACT_APP_KEYCLOAK_CHECK_SSO: ${REACT_APP_KEYCLOAK_CHECK_SSO:-true}
+      REACT_APP_STRICT_MODE: ${REACT_APP_STRICT_MODE:-false}

@@ -6,7 +6,7 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [user, setUser] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const [isLoading, setIsLoading] = React.useState(UserService.isAuthCallback());
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -72,6 +72,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = () => {
+    setError(null);
     UserService.doLogin();
   };
 

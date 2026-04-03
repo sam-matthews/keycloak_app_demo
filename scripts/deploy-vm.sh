@@ -27,14 +27,20 @@ fi
 
 echo "[deploy] using compose command: $DC"
 
+COMPOSE_FILES=("-f" "docker-compose.yml")
+if [[ -f docker-compose.prod.yml ]]; then
+  COMPOSE_FILES+=("-f" "docker-compose.prod.yml")
+  echo "[deploy] using compose files: docker-compose.yml + docker-compose.prod.yml"
+fi
+
 # Pull first for pre-built images; ignore failures because some services are build-only.
-$DC pull --ignore-pull-failures || true
-$DC up -d --build
+"$DC" "${COMPOSE_FILES[@]}" pull --ignore-pull-failures || true
+"$DC" "${COMPOSE_FILES[@]}" up -d --build
 
 # Apply idempotent Keycloak realm/client configuration after services are up.
-$DC run --rm keycloak-setup
+"$DC" "${COMPOSE_FILES[@]}" run --rm keycloak-setup
 
 echo "[deploy] service status"
-$DC ps
+"$DC" "${COMPOSE_FILES[@]}" ps
 
 echo "[deploy] done"

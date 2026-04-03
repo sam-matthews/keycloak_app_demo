@@ -131,6 +131,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: ${FRONTEND_BUILD_TARGET:-development}
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:3001}
+        REACT_APP_KEYCLOAK_URL: ${REACT_APP_KEYCLOAK_URL:-http://localhost:8080}
+        REACT_APP_KEYCLOAK_REALM: ${REACT_APP_KEYCLOAK_REALM:-demo-realm}
+        REACT_APP_KEYCLOAK_CLIENT_ID: ${REACT_APP_KEYCLOAK_CLIENT_ID:-web-app}
+        REACT_APP_KEYCLOAK_CHECK_SSO: ${REACT_APP_KEYCLOAK_CHECK_SSO:-true}
+        REACT_APP_STRICT_MODE: ${REACT_APP_STRICT_MODE:-true}
     container_name: frontend
     environment:
       HOST: 0.0.0.0

@@ -9,57 +9,73 @@ const keycloakConfig = {
 const keycloak = new Keycloak(keycloakConfig);
 
 let isInitialized = false;
+let initPromise = null;
+
+const finishInit = (authenticated, onAuthenticatedCallback) => {
+  if (onAuthenticatedCallback) {
+    onAuthenticatedCallback();
+  }
+  return authenticated;
+};
 
 const initKeycloak = (onAuthenticatedCallback, onErrorCallback) => {
-  // Prevent multiple initializations (React StrictMode calls useEffect twice)
-  if (isInitialized) {
-    console.log('Keycloak already initialized, authenticated:', keycloak.authenticated);
-    // Always call the callback to allow the app to finish loading
-    if (keycloak.authenticated && onAuthenticatedCallback) {
-      onAuthenticatedCallback();
-    } else if (!keycloak.authenticated && onErrorCallback) {
-      // Not authenticated but already initialized - let the app know it's done loading
-      onAuthenticatedCallback && onAuthenticatedCallback();
-    }
-    return Promise.resolve(keycloak.authenticated);
+  // React StrictMode can mount twice in development. Reuse in-flight init to avoid races.
+  if (initPromise) {
+    return initPromise
+      .then((authenticated) => finishInit(authenticated, onAuthenticatedCallback))
+      .catch((error) => {
+        if (onErrorCallback) {
+          onErrorCallback(error);
+          return false;
+        }
+        throw error;
+      });
   }
 
-  isInitialized = true;
+  if (isInitialized) {
+    console.log('Keycloak already initialized, authenticated:', keycloak.authenticated);
+    return Promise.resolve(finishInit(keycloak.authenticated, onAuthenticatedCallback));
+  }
+
   console.log('Starting Keycloak initialization...');
 
-  return keycloak.init({
+  initPromise = keycloak.init({
     onLoad: 'check-sso',
     silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
     pkceMethod: 'S256',
     checkLoginIframe: false
   })
   .then((authenticated) => {
+    isInitialized = true;
     console.log('Keycloak init complete - authenticated:', authenticated);
     if (!authenticated) {
-      console.log('User not authenticated, redirecting to login...');
-      keycloak.login();
+      console.log('User not authenticated; waiting for explicit login action');
     } else {
       console.log('User authenticated successfully');
-      if (onAuthenticatedCallback) {
-        onAuthenticatedCallback();
-      }
     }
-    return authenticated;
+    return finishInit(authenticated, onAuthenticatedCallback);
   })
   .catch((error) => {
     console.error('Keycloak init error:', error);
     isInitialized = false; // Reset on error so it can be retried
     if (onErrorCallback) {
       onErrorCallback(error);
+      return false;
     } else {
       throw error;
     }
+  })
+  .finally(() => {
+    initPromise = null;
   });
+
+  return initPromise;
 };
 
-const doLogin = () => keycloak.login();
+const doLogin = () =>
+  keycloak.login({ redirectUri: window.location.origin + window.location.pathname });
 
-const doLogout = () => keycloak.logout();
+const doLogout = () => keycloak.logout({ redirectUri: window.location.origin });
 
 const getToken = () => keycloak.token;
 

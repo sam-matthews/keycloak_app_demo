@@ -68,3 +68,18 @@ jobs:
           curl --retry 12 --retry-delay 5 --retry-all-errors -fsS https://api.sammatthews.nz/api/health
           curl --retry 12 --retry-delay 5 --retry-all-errors -fsSI https://app.sammatthews.nz
           curl --retry 12 --retry-delay 5 --retry-all-errors -fsSI https://auth.sammatthews.nz
+          # Traefik health check (ping endpoint)
+          curl --retry 12 --retry-delay 5 --retry-all-errors -fsS http://reverse-proxy:80/ping || curl --retry 12 --retry-delay 5 --retry-all-errors -fsS http://localhost/ping || curl --retry 12 --retry-delay 5 --retry-all-errors -fsS https://app.sammatthews.nz/ping || echo "Warning: Traefik /ping endpoint not reachable from this context"
+
+      - name: Prune unused Docker images on VM
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_PORT }}
+          script: |
+            set -euo pipefail
+            echo "Pruning unused Docker images..."
+            docker image prune -af
+            echo "Docker image prune complete."

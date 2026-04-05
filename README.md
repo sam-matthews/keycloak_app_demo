@@ -92,7 +92,7 @@ npm run logs:frontend       # View frontend logs only
 npm run logs:keycloak       # View Keycloak logs only
 npm run lockfiles:sync      # Regenerate lockfiles with Node 20 + verify npm ci
 npm run lockfiles:check     # CI-style npm ci validation only (no lockfile changes)
-npm run security:scan       # Dockerized Trivy vulnerability scan for lockfiles
+npm run security:images:age # Enforce 14-day minimum age for configured container tags
 ```
 
 ## Automatic Dependency Updates
@@ -141,21 +141,23 @@ You can tune this approach by:
 2. Setting `includeTransitiveDependencies` to `true` or `false` based on strictness needs.
 3. Adding temporary emergency exceptions under `allowFreshVersions`.
 
-## CVE Scanning In CI
+## Image Age Policy In CI
 
-This repository includes automated security scanning in the pipeline via `.github/workflows/security-scan.yml`.
+This repository enforces image release-age policy in the pipeline via `.github/workflows/security-scan.yml`.
 
-It checks vulnerabilities from security advisory/CVE sources using:
+It also enforces a container image age gate:
 
-- `npm audit` for backend and frontend lockfiles
-- Trivy filesystem scan for OS and library vulnerabilities
+- Policy file: `.github/security/image-policy.json`
+- Default: `minimumImageAgeDays = 14`
+- Source of image tags: tracked services in `docker-compose.yml`
+- Enforcement: `scripts/verify-images.js` in CI
 
-The workflow fails on `HIGH` and `CRITICAL` findings.
+Configured service images are read from `docker-compose.yml` (`keycloak-db`, `app-db`, and `reverse-proxy` by default), so image tag changes only need to be made in one place.
 
-You can also run an equivalent check locally:
+You can run the same check locally:
 
 ```bash
-npm run security:audit
+npm run security:images:age
 ```
 
 ## Additional Supply Chain Controls
@@ -164,9 +166,6 @@ The CI setup now includes additional protections:
 
 - Action pinning by commit SHA in workflow files under `.github/workflows/`
 - CodeQL static analysis in `.github/workflows/codeql.yml`
-- SBOM generation and artifact upload in `.github/workflows/security-scan.yml`
-
-The SBOM files are published as workflow artifacts (`backend-sbom.spdx.json` and `frontend-sbom.spdx.json`) for audit and incident response workflows.
 
 ## Documentation
 

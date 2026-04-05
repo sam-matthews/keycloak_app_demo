@@ -1,0 +1,10 @@
+{
+  "minimumImageAgeDays": 14,
+  "composeFile": "docker-compose.yml",
+  "trackedServices": [
+    "keycloak-db",
+    "app-db",
+    "reverse-proxy",
+    "keycloak"
+  ]
+}

@@ -90,8 +90,8 @@ jobs:
 
       - name: Generate SBOM files
         run: |
-          npm sbom --prefix backend > backend-sbom.spdx.json
-          npm sbom --prefix frontend > frontend-sbom.spdx.json
+          npm sbom --prefix backend --sbom-format spdx > backend-sbom.spdx.json
+          npm sbom --prefix frontend --sbom-format spdx > frontend-sbom.spdx.json
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

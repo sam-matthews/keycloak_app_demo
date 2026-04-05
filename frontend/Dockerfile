@@ -1,4 +1,4 @@
-FROM node:18-alpine AS development
+FROM node:20-alpine AS development
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ EXPOSE 3000
 
 CMD ["npm", "start"]
 
-FROM node:18-alpine AS build
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
@@ -36,7 +36,7 @@ ENV REACT_APP_STRICT_MODE=${REACT_APP_STRICT_MODE}
 
 RUN npm run build
 
-FROM nginx:1.27-alpine AS production
+FROM nginx:1.28-alpine AS production
 
 COPY ./nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html

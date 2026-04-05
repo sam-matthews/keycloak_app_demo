@@ -17,15 +17,15 @@ if [[ ! -f .env ]]; then
 fi
 
 if docker compose version >/dev/null 2>&1; then
-  DC="docker compose"
+  DC=(docker compose)
 elif command -v docker-compose >/dev/null 2>&1; then
-  DC="docker-compose"
+  DC=(docker-compose)
 else
   echo "[deploy] ERROR: docker compose is not installed"
   exit 1
 fi
 
-echo "[deploy] using compose command: $DC"
+echo "[deploy] using compose command: ${DC[*]}"
 
 COMPOSE_FILES=("-f" "docker-compose.yml")
 if [[ -f docker-compose.prod.yml ]]; then
@@ -34,13 +34,13 @@ if [[ -f docker-compose.prod.yml ]]; then
 fi
 
 # Pull first for pre-built images; ignore failures because some services are build-only.
-"$DC" "${COMPOSE_FILES[@]}" pull --ignore-pull-failures || true
-"$DC" "${COMPOSE_FILES[@]}" up -d --build
+"${DC[@]}" "${COMPOSE_FILES[@]}" pull --ignore-pull-failures || true
+"${DC[@]}" "${COMPOSE_FILES[@]}" up -d --build
 
 # Apply idempotent Keycloak realm/client configuration after services are up.
-"$DC" "${COMPOSE_FILES[@]}" run --rm keycloak-setup
+"${DC[@]}" "${COMPOSE_FILES[@]}" run --rm keycloak-setup
 
 echo "[deploy] service status"
-"$DC" "${COMPOSE_FILES[@]}" ps
+"${DC[@]}" "${COMPOSE_FILES[@]}" ps
 
 echo "[deploy] done"

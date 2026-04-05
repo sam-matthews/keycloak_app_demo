@@ -108,7 +108,7 @@ async function fetchPublishedAt(name, version, cache) {
     return cache.get(cacheKey);
   }
 
-  const encodedName = encodeURIComponent(name).replace('%40', '@');
+  const encodedName = encodeURIComponent(name).replace(/%40/g, '@');
   const url = `https://registry.npmjs.org/${encodedName}`;
   const res = await fetch(url);
 

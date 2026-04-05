@@ -1,0 +1,47 @@
+name: Dependency Guard
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'backend/package.json'
+      - 'frontend/package.json'
+      - 'backend/package-lock.json'
+      - 'frontend/package-lock.json'
+      - '.github/security/blocked-packages.json'
+      - '.github/security/dependency-age-policy.json'
+      - 'scripts/verify-dependencies.js'
+  push:
+    branches:
+      - integration
+    paths:
+      - 'package.json'
+      - 'backend/package.json'
+      - 'frontend/package.json'
+      - 'backend/package-lock.json'
+      - 'frontend/package-lock.json'
+      - '.github/security/blocked-packages.json'
+      - '.github/security/dependency-age-policy.json'
+      - 'scripts/verify-dependencies.js'
+
+jobs:
+  dependency-policy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend --ignore-scripts
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend --ignore-scripts
+
+      - name: Enforce dependency policy
+        run: npm run security:deps

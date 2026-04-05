@@ -1,7 +1,7 @@
 services:
   # Reverse Proxy (TLS termination and host-based routing)
   reverse-proxy:
-    image: traefik:v3.0.4
+    image: traefik:v3.3
     container_name: reverse-proxy
     command:
       - --configFile=/etc/traefik/traefik.yml
@@ -70,7 +70,7 @@ services:
 
   # Keycloak Server
   keycloak:
-    image: quay.io/keycloak/keycloak:23.0.0
+    image: quay.io/keycloak/keycloak:26.2.3
     container_name: keycloak
     command: start-dev
     environment:
@@ -159,7 +159,7 @@ services:
 
   # Keycloak Setup Service (run manually with: docker-compose run --rm keycloak-setup)
   keycloak-setup:
-    image: node:18-alpine
+    image: node:20-alpine
     container_name: keycloak-setup
     working_dir: /app
     environment:

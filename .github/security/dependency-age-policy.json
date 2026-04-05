@@ -1,0 +1,12 @@
+{
+  "minimumReleaseAgeDays": 14,
+  "projects": [
+    "backend",
+    "frontend"
+  ],
+  "allowFreshVersions": {
+    "axios": [
+      "1.14.0"
+    ]
+  }
+}

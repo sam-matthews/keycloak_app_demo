@@ -92,6 +92,77 @@ npm run logs:frontend       # View frontend logs only
 npm run logs:keycloak       # View Keycloak logs only
 ```
 
+## Automatic Dependency Updates
+
+This repository now includes automated dependency updates via Dependabot:
+
+- Docker images in `docker-compose.yml` and Dockerfiles (`.github/dependabot.yml`)
+- Backend npm packages (`/backend/package.json`)
+- Frontend npm packages (`/frontend/package.json`)
+- GitHub Actions workflow versions
+
+Dependabot opens weekly PRs with version bumps so updates are reviewed and merged safely instead of drifting over time.
+
+To enable this in GitHub:
+
+1. Push this branch to your GitHub repository.
+2. Ensure Dependabot is enabled in repository settings.
+3. Review and merge generated PRs each week.
+
+### Blocking Known-Bad Versions
+
+Known malicious or compromised package versions can be blocked centrally:
+
+- Policy file: `.github/security/blocked-packages.json`
+- Checker script: `scripts/verify-dependencies.js`
+- CI workflow: `.github/workflows/dependency-guard.yml`
+
+If a blocked version appears in `backend/package-lock.json` or `frontend/package-lock.json`, CI fails.
+
+To block a newly identified bad release, add it to `.github/security/blocked-packages.json`.
+
+### Minimum Release Age Gate
+
+To reduce supply-chain risk from freshly published packages, this repository enforces a minimum package age before adoption.
+
+- Policy file: `.github/security/dependency-age-policy.json`
+- Default: `minimumReleaseAgeDays = 14`
+- Enforcement: `scripts/verify-dependencies.js` in CI
+
+If a dependency version is newer than the configured age, CI fails.
+
+You can tune this approach by:
+
+1. Setting `minimumReleaseAgeDays` to `14` or `30`.
+2. Adding temporary emergency exceptions under `allowFreshVersions`.
+
+## CVE Scanning In CI
+
+This repository includes automated security scanning in the pipeline via `.github/workflows/security-scan.yml`.
+
+It checks vulnerabilities from security advisory/CVE sources using:
+
+- `npm audit` for backend and frontend lockfiles
+- Trivy filesystem scan for OS and library vulnerabilities
+
+The workflow fails on `HIGH` and `CRITICAL` findings.
+
+You can also run an equivalent check locally:
+
+```bash
+npm run security:audit
+```
+
+## Additional Supply Chain Controls
+
+The CI setup now includes additional protections:
+
+- Action pinning by commit SHA in workflow files under `.github/workflows/`
+- CodeQL static analysis in `.github/workflows/codeql.yml`
+- SBOM generation and artifact upload in `.github/workflows/security-scan.yml`
+
+The SBOM files are published as workflow artifacts (`backend-sbom.spdx.json` and `frontend-sbom.spdx.json`) for audit and incident response workflows.
+
 ## Documentation
 
 - [Quick Start Guide](doc/QUICKSTART.md) - Get running in 5 minutes

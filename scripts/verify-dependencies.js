@@ -67,6 +67,41 @@ function collectDirectDependencies(projectDir) {
   return direct;
 }
 
+function collectTransitiveDependencies(projectDir) {
+  const lockJsonPath = path.join(repoRoot, projectDir, 'package-lock.json');
+  if (!fs.existsSync(lockJsonPath)) {
+    return [];
+  }
+
+  const lockJson = readJson(lockJsonPath);
+  const packages = lockJson.packages || {};
+  const transitive = [];
+
+  for (const [lockPath, pkgMeta] of Object.entries(packages)) {
+    if (!lockPath || !lockPath.startsWith('node_modules/')) {
+      continue;
+    }
+
+    // Top-level packages are already handled by direct dependency checks.
+    if (!lockPath.slice('node_modules/'.length).includes('/node_modules/')) {
+      continue;
+    }
+
+    if (!pkgMeta || !pkgMeta.name || !pkgMeta.version) {
+      continue;
+    }
+
+    transitive.push({
+      projectDir,
+      name: pkgMeta.name,
+      version: pkgMeta.version,
+      kind: 'transitive'
+    });
+  }
+
+  return transitive;
+}
+
 async function fetchPublishedAt(name, version, cache) {
   const cacheKey = `${name}@${version}`;
   if (cache.has(cacheKey)) {
@@ -107,6 +142,30 @@ function formatAgeHit(projectDir, name, version, minimumAgeDays, ageDays) {
   return `Dependency too new: ${name}@${version} in ${projectDir} (${roundedAge}d old, minimum ${minimumAgeDays}d)`;
 }
 
+function collectDependenciesForAgeCheck(projectDir, agePolicy) {
+  const includeTransitive = agePolicy.includeTransitiveDependencies === true;
+  const directDependencies = collectDirectDependencies(projectDir).map((dep) => ({
+    ...dep,
+    kind: 'direct'
+  }));
+
+  if (!includeTransitive) {
+    return directDependencies;
+  }
+
+  const all = [...directDependencies, ...collectTransitiveDependencies(projectDir)];
+  const deduped = new Map();
+
+  for (const dep of all) {
+    const key = `${dep.projectDir}:${dep.name}@${dep.version}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, dep);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
 async function main() {
   const blocklist = readJson(blocklistPath);
   const agePolicy = readJson(agePolicyPath);
@@ -142,9 +201,9 @@ async function main() {
   const projects = Array.isArray(agePolicy.projects) ? agePolicy.projects : ['backend', 'frontend'];
 
   for (const projectDir of projects) {
-    const directDependencies = collectDirectDependencies(projectDir);
+    const dependenciesForAgeCheck = collectDependenciesForAgeCheck(projectDir, agePolicy);
 
-    for (const dep of directDependencies) {
+    for (const dep of dependenciesForAgeCheck) {
       if (isAllowedFreshVersion(agePolicy, dep.name, dep.version)) {
         continue;
       }

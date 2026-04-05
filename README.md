@@ -127,14 +127,16 @@ To reduce supply-chain risk from freshly published packages, this repository enf
 
 - Policy file: `.github/security/dependency-age-policy.json`
 - Default: `minimumReleaseAgeDays = 14`
+- Default: `includeTransitiveDependencies = true`
 - Enforcement: `scripts/verify-dependencies.js` in CI
 
-If a dependency version is newer than the configured age, CI fails.
+If a direct or transitive dependency version is newer than the configured age, CI fails.
 
 You can tune this approach by:
 
 1. Setting `minimumReleaseAgeDays` to `14` or `30`.
-2. Adding temporary emergency exceptions under `allowFreshVersions`.
+2. Setting `includeTransitiveDependencies` to `true` or `false` based on strictness needs.
+3. Adding temporary emergency exceptions under `allowFreshVersions`.
 
 ## CVE Scanning In CI
 

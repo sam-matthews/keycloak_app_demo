@@ -90,6 +90,9 @@ npm run logs                # View logs for all services
 npm run logs:backend        # View backend logs only
 npm run logs:frontend       # View frontend logs only
 npm run logs:keycloak       # View Keycloak logs only
+npm run lockfiles:sync      # Regenerate lockfiles with Node 20 + verify npm ci
+npm run lockfiles:check     # CI-style npm ci validation only (no lockfile changes)
+npm run security:scan       # Dockerized Trivy vulnerability scan for lockfiles
 ```
 
 ## Automatic Dependency Updates

@@ -13,6 +13,9 @@
     "logs:frontend": "docker-compose logs -f frontend",
     "logs:keycloak": "docker-compose logs -f keycloak",
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "lockfiles:sync": "./scripts/sync-lockfiles.sh",
+    "lockfiles:check": "docker run --rm -v \"$PWD\":/work -w /work node:20 bash -lc \"npm ci --prefix backend --ignore-scripts && npm ci --prefix frontend --ignore-scripts\"",
+    "security:scan": "./scripts/scan-vulnerabilities.sh",
     "setup": "docker-compose up -d && npm run setup-keycloak",
     "security:deps": "node scripts/verify-dependencies.js",
     "security:audit": "npm audit --prefix backend --audit-level=high && npm audit --prefix frontend --audit-level=high"

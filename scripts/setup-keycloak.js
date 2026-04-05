@@ -95,6 +95,33 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
+function parseErrorMessage(error) {
+  if (!error) {
+    return '';
+  }
+
+  const raw = typeof error.message === 'string' ? error.message : String(error.message || '');
+  if (!raw) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.errorMessage === 'string') {
+      return parsed.errorMessage;
+    }
+  } catch (_) {
+    // Not JSON, fall back to raw message.
+  }
+
+  return raw;
+}
+
+function isAlreadyExistsError(error) {
+  const normalized = parseErrorMessage(error).toLowerCase();
+  return normalized.includes('already exists');
+}
+
 function isPasskeyOnlyMode() {
   return KEYCLOAK_LOGIN_MODE === LOGIN_MODE_PASSKEY_ONLY;
 }
@@ -271,7 +298,7 @@ async function createRealm(token) {
     log(`✓ Realm '${REALM_NAME}' created successfully`, 'green');
     return true;
   } catch (error) {
-    if (error.statusCode === 409) {
+    if (error.statusCode === 409 || isAlreadyExistsError(error)) {
       log(`ℹ Realm '${REALM_NAME}' already exists`, 'cyan');
       return false;
     }
